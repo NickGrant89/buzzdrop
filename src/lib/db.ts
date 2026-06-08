@@ -75,18 +75,31 @@ export type SocialPost = {
   created_at: string;
 };
 
-const dbPath =
-  process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "trenddrop.db");
-const dataDir = path.dirname(dbPath);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
 const globalForDb = globalThis as typeof globalThis & { __trenddropDb?: Database.Database };
 
-function createDb() {
-  const database = new Database(dbPath);
+function isBuildTime(): boolean {
+  return (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.npm_lifecycle_event === "build"
+  );
+}
+
+function resolveDbPath(): string {
+  if (isBuildTime()) return ":memory:";
+  return process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "trenddrop.db");
+}
+
+function createDb(resolvedPath: string) {
+  if (resolvedPath !== ":memory:") {
+    const dataDir = path.dirname(resolvedPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+  }
+
+  const database = new Database(resolvedPath);
   database.pragma("journal_mode = WAL");
+  database.pragma("busy_timeout = 5000");
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS products (
@@ -215,21 +228,39 @@ function migrateSchema(database: Database.Database) {
   }
 }
 
-export const db = globalForDb.__trenddropDb ?? createDb();
+let dbInstance: Database.Database | null = null;
 
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__trenddropDb = db;
+export function getDb(): Database.Database {
+  if (dbInstance) return dbInstance;
+  if (globalForDb.__trenddropDb && !isBuildTime()) {
+    dbInstance = globalForDb.__trenddropDb;
+    return dbInstance;
+  }
+
+  dbInstance = createDb(resolveDbPath());
+  if (!isBuildTime()) {
+    globalForDb.__trenddropDb = dbInstance;
+  }
+  return dbInstance;
 }
 
+export const db: Database.Database = new Proxy({} as Database.Database, {
+  get(_target, prop, receiver) {
+    const instance = getDb();
+    const value = Reflect.get(instance, prop, receiver);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
+
 export function getSetting(key: string, fallback = ""): string {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
+  const row = getDb().prepare("SELECT value FROM settings WHERE key = ?").get(key) as
     | { value: string }
     | undefined;
   return row?.value ?? fallback;
 }
 
 export function setSetting(key: string, value: string) {
-  db.prepare(
+  getDb().prepare(
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   ).run(key, value);
 }

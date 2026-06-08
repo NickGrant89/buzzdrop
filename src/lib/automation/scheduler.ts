@@ -71,7 +71,8 @@ export function startAutomationScheduler() {
   console.log("  - Order fulfillment: every 5 minutes");
   console.log("  - Social marketing: 10:00 & 18:00 daily");
 
-  runProductSync();
+  // Defer first sync so the HTTP server can respond immediately on deploy
+  setTimeout(() => void runProductSync(), 10_000);
 }
 
 export async function runJobManually(

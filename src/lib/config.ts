@@ -30,3 +30,13 @@ export function usdToStoreCurrency(usd: number): number {
   }
   return usd;
 }
+
+/** Fallback UK shipping estimate when CJ freight API is unavailable (GBP). */
+export function defaultCjShippingEstimate(): number {
+  return parseFloat(process.env.CJ_DEFAULT_SHIPPING_GBP ?? "5.99");
+}
+
+/** UK postcode used when estimating CJ freight during product sync. */
+export function cjShippingEstimatePostcode(): string {
+  return (process.env.CJ_SHIPPING_ESTIMATE_POSTCODE ?? "SW1A1AA").replace(/\s/g, "");
+}

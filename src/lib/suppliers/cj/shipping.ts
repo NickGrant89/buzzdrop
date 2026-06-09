@@ -1,5 +1,10 @@
 import { cjAuthenticatedFetch } from "./client";
-import { cjConfig } from "@/lib/config";
+import {
+  cjConfig,
+  cjShippingEstimatePostcode,
+  defaultCjShippingEstimate,
+  usdToStoreCurrency,
+} from "@/lib/config";
 
 type FreightOption = {
   logisticName?: string;
@@ -12,6 +17,89 @@ export type ResolvedShipping = {
   fromCountryCode: string;
 };
 
+export type ShippingEstimate = ResolvedShipping & {
+  shippingCost: number;
+};
+
+function shippingOrigins(): string[] {
+  return [cjConfig.fromCountryCode, "CN", "US"].filter(
+    (code, index, all) => code && all.indexOf(code) === index
+  );
+}
+
+async function fetchFreightOptions(
+  items: Array<{ vid: string; quantity: number }>,
+  destCountryCode: string,
+  postcode?: string
+): Promise<Array<FreightOption & { fromCountryCode: string }>> {
+  const zip = postcode?.replace(/\s/g, "") || undefined;
+  const allOptions: Array<FreightOption & { fromCountryCode: string }> = [];
+
+  for (const startCountryCode of shippingOrigins()) {
+    try {
+      const res = await cjAuthenticatedFetch<FreightOption[]>("/logistic/freightCalculate", {
+        method: "POST",
+        body: JSON.stringify({
+          startCountryCode,
+          endCountryCode: destCountryCode,
+          zip,
+          products: items.map((item) => ({
+            vid: item.vid,
+            quantity: item.quantity,
+          })),
+        }),
+      });
+
+      for (const option of res.data ?? []) {
+        if (!option.logisticName?.trim()) continue;
+        allOptions.push({ ...option, fromCountryCode: startCountryCode });
+      }
+    } catch {
+      /* try next origin */
+    }
+  }
+
+  return allOptions;
+}
+
+function pickCheapestOption(
+  options: Array<FreightOption & { fromCountryCode: string }>
+): (FreightOption & { fromCountryCode: string }) | null {
+  if (options.length === 0) return null;
+
+  return [...options].sort(
+    (a, b) => (a.logisticPrice ?? 9999) - (b.logisticPrice ?? 9999)
+  )[0];
+}
+
+export async function estimateCjShipping(
+  items: Array<{ vid: string; quantity: number }>,
+  destCountryCode = "GB",
+  postcode = cjShippingEstimatePostcode()
+): Promise<ShippingEstimate | null> {
+  if (items.length === 0 || !items[0]?.vid) return null;
+
+  const override = process.env.CJ_LOGISTIC_NAME?.trim();
+  if (override) {
+    return {
+      logisticName: override,
+      fromCountryCode: process.env.CJ_FROM_COUNTRY_CODE ?? cjConfig.fromCountryCode,
+      shippingCost: defaultCjShippingEstimate(),
+    };
+  }
+
+  const options = await fetchFreightOptions(items, destCountryCode, postcode);
+  const cheapest = pickCheapestOption(options);
+  if (!cheapest?.logisticName) return null;
+
+  const shippingUsd = cheapest.logisticPrice ?? 0;
+  return {
+    logisticName: cheapest.logisticName.trim(),
+    fromCountryCode: cheapest.fromCountryCode,
+    shippingCost: shippingUsd > 0 ? usdToStoreCurrency(shippingUsd) : defaultCjShippingEstimate(),
+  };
+}
+
 export async function resolveShipping(
   items: Array<{ vid: string; quantity: number }>,
   destCountryCode = "GB",
@@ -21,46 +109,20 @@ export async function resolveShipping(
   if (override) {
     return {
       logisticName: override,
-      fromCountryCode: process.env.CJ_FROM_COUNTRY_CODE ?? "CN",
+      fromCountryCode: process.env.CJ_FROM_COUNTRY_CODE ?? cjConfig.fromCountryCode,
     };
   }
 
-  // Most CJ catalog items ship from CN; GB warehouse is less common.
-  const origins = ["CN", cjConfig.fromCountryCode, "US"].filter(
-    (code, index, all) => code && all.indexOf(code) === index
-  );
-
-  let lastError = "No shipping methods returned";
-
-  for (const startCountryCode of origins) {
-    try {
-      const res = await cjAuthenticatedFetch<FreightOption[]>("/logistic/freightCalculate", {
-        method: "POST",
-        body: JSON.stringify({
-          startCountryCode,
-          endCountryCode: destCountryCode,
-          zip: postcode?.replace(/\s/g, ""),
-          products: items.map((item) => ({
-            vid: item.vid,
-            quantity: item.quantity,
-          })),
-        }),
-      });
-
-      const options = (res.data ?? []).filter((o) => o.logisticName?.trim());
-      if (options.length === 0) continue;
-
-      options.sort((a, b) => (a.logisticPrice ?? 9999) - (b.logisticPrice ?? 9999));
-      return {
-        logisticName: options[0].logisticName!.trim(),
-        fromCountryCode: startCountryCode,
-      };
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-    }
+  const options = await fetchFreightOptions(items, destCountryCode, postcode);
+  const cheapest = pickCheapestOption(options);
+  if (!cheapest?.logisticName) {
+    throw new Error(`Could not find shipping method to ${destCountryCode}`);
   }
 
-  throw new Error(`Could not find shipping method to ${destCountryCode}: ${lastError}`);
+  return {
+    logisticName: cheapest.logisticName.trim(),
+    fromCountryCode: cheapest.fromCountryCode,
+  };
 }
 
 /** @deprecated use resolveShipping */

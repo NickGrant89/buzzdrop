@@ -1,6 +1,8 @@
 import { cjAuthenticatedFetch } from "./client";
-import { cjConfig, usdToStoreCurrency } from "@/lib/config";
+import { cjConfig, defaultCjShippingEstimate, usdToStoreCurrency } from "@/lib/config";
+import { landedSupplierCost } from "@/lib/automation/pricing";
 import { normalizeCjProduct } from "@/lib/product-normalize";
+import { estimateCjShipping } from "./shipping";
 
 export type CjProductForImport = {
   title: string;
@@ -8,6 +10,8 @@ export type CjProductForImport = {
   image_url: string;
   category: string;
   supplier_cost: number;
+  supplier_product_cost: number;
+  supplier_shipping_cost: number;
   trend_score: number;
   supplier_sku: string;
   supplier_pid: string;
@@ -97,6 +101,28 @@ function stripHtml(html: string): string {
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function attachShippingEstimate(product: CjProductForImport): Promise<CjProductForImport> {
+  const productCost = product.supplier_product_cost;
+  let shippingCost = defaultCjShippingEstimate();
+
+  if (product.supplier_vid) {
+    try {
+      const estimate = await estimateCjShipping([{ vid: product.supplier_vid, quantity: 1 }]);
+      if (estimate) shippingCost = estimate.shippingCost;
+    } catch {
+      /* use fallback */
+    }
+    await sleep(300);
+  }
+
+  return {
+    ...product,
+    supplier_product_cost: productCost,
+    supplier_shipping_cost: shippingCost,
+    supplier_cost: landedSupplierCost(productCost, shippingCost),
+  };
 }
 
 function getVariants(p: ProductQueryData): CjVariant[] {
@@ -273,6 +299,7 @@ function mapQueryProduct(p: ProductQueryData | null | undefined): CjProductForIm
     p.bigImage ??
     "https://via.placeholder.com/400";
 
+  const productCost = usdToStoreCurrency(costUsd);
   const listedNum = p.listedNum ?? 50;
   const trendScore = Math.min(99, 60 + Math.log10(listedNum + 1) * 15);
 
@@ -281,7 +308,9 @@ function mapQueryProduct(p: ProductQueryData | null | undefined): CjProductForIm
     description: stripHtml(p.description || p.productNameEn),
     image_url: image,
     category: p.categoryNameEn ?? p.categoryName ?? "Trending",
-    supplier_cost: usdToStoreCurrency(costUsd),
+    supplier_product_cost: productCost,
+    supplier_shipping_cost: 0,
+    supplier_cost: productCost,
     trend_score: Math.round(trendScore),
     supplier_sku: variant.variantSku || p.productSku,
     supplier_pid: p.pid,
@@ -304,12 +333,15 @@ function mapListItem(item: ListProduct): CjProductForImport | null {
     item.productImageSet?.[0] ??
     "https://via.placeholder.com/400";
 
+  const productCost = usdToStoreCurrency(costUsd);
   return normalizeCjProduct({
     title: item.productNameEn ?? item.productName ?? "Product",
     description: stripHtml(item.description ?? item.productNameEn ?? ""),
     image_url: image,
     category: item.categoryNameEn ?? item.categoryName ?? "Trending",
-    supplier_cost: usdToStoreCurrency(costUsd),
+    supplier_product_cost: productCost,
+    supplier_shipping_cost: 0,
+    supplier_cost: productCost,
     trend_score: Math.min(99, 60 + Math.log10((item.listedNum ?? 10) + 1) * 15),
     supplier_sku: variant?.variantSku ?? item.productSku ?? pid,
     supplier_pid: pid,
@@ -336,7 +368,7 @@ export async function fetchCjTrendingProductsWithMeta(limit = 24): Promise<Fetch
     try {
       const detail = await fetchCjProductDetail(pid);
       if (detail) {
-        products.push(detail);
+        products.push(await attachShippingEstimate(detail));
         await sleep(600);
         continue;
       }
@@ -346,7 +378,7 @@ export async function fetchCjTrendingProductsWithMeta(limit = 24): Promise<Fetch
 
     if (seed && "productNameEn" in seed) {
       const fallback = mapListItem(seed);
-      if (fallback) products.push(fallback);
+      if (fallback) products.push(await attachShippingEstimate(fallback));
     }
 
     await sleep(600);

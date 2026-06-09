@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../db";
-import { calculateRetailPrice } from "./pricing";
+import { calculateRetailPrice, landedSupplierCost } from "./pricing";
 import { logAutomation } from "./logger";
-import { isCjConfigured } from "../config";
+import { isCjConfigured, defaultCjShippingEstimate } from "../config";
 import { fetchCjTrendingProductsWithMeta } from "../suppliers/cj/products";
+import { estimateCjShipping } from "../suppliers/cj/shipping";
 import {
   buildProductSlug,
   normalizeProductDescription,
@@ -17,6 +18,8 @@ export type TrendingProductSource = {
   image_url: string;
   category: string;
   supplier_cost: number;
+  supplier_product_cost: number;
+  supplier_shipping_cost: number;
   trend_score: number;
   supplier_sku: string;
   supplier_pid?: string;
@@ -32,11 +35,13 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
   const insert = db.prepare(`
     INSERT INTO products (
       id, slug, title, description, image_url, category,
-      supplier_cost, retail_price, trend_score, supplier_sku, supplier_pid, supplier_vid, supplier_name,
+      supplier_cost, supplier_product_cost, supplier_shipping_cost,
+      retail_price, trend_score, supplier_sku, supplier_pid, supplier_vid, supplier_name,
       stock, is_active, created_at, updated_at
     ) VALUES (
       @id, @slug, @title, @description, @image_url, @category,
-      @supplier_cost, @retail_price, @trend_score, @supplier_sku, @supplier_pid, @supplier_vid, @supplier_name,
+      @supplier_cost, @supplier_product_cost, @supplier_shipping_cost,
+      @retail_price, @trend_score, @supplier_sku, @supplier_pid, @supplier_vid, @supplier_name,
       @stock, 1, @now, @now
     )
   `);
@@ -48,6 +53,8 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
       image_url = @image_url,
       category = @category,
       supplier_cost = @supplier_cost,
+      supplier_product_cost = @supplier_product_cost,
+      supplier_shipping_cost = @supplier_shipping_cost,
       retail_price = @retail_price,
       trend_score = @trend_score,
       supplier_sku = @supplier_sku,
@@ -79,6 +86,8 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
         image_url: raw.image_url,
         category,
         supplier_cost: raw.supplier_cost,
+        supplier_product_cost: raw.supplier_product_cost,
+        supplier_shipping_cost: raw.supplier_shipping_cost,
         retail_price: retailPrice,
         trend_score: raw.trend_score,
         supplier_sku: raw.supplier_sku,
@@ -192,7 +201,7 @@ export async function syncTrendingProducts(): Promise<{ added: number; updated: 
     await logAutomation(
       "product_sync",
       "success",
-      `CJ UK: synced ${cjProducts.length} trending products (${result.added} new, ${result.updated} updated)`
+      `CJ UK: synced ${cjProducts.length} products with shipping in prices (${result.added} new, ${result.updated} updated)`
     );
     return { ...result, source: "cj" };
   } catch (err) {
@@ -206,29 +215,61 @@ export async function updatePricesAndStock(): Promise<number> {
 
   const products = db
     .prepare(
-      "SELECT id, supplier_pid, supplier_cost, trend_score FROM products WHERE is_active = 1 AND supplier_pid != ''"
+      `SELECT id, supplier_vid, supplier_product_cost, supplier_shipping_cost, supplier_cost, trend_score
+       FROM products WHERE is_active = 1 AND supplier_pid != ''`
     )
-    .all() as { id: string; supplier_pid: string; supplier_cost: number; trend_score: number }[];
+    .all() as {
+    id: string;
+    supplier_vid: string;
+    supplier_product_cost: number;
+    supplier_shipping_cost: number;
+    supplier_cost: number;
+    trend_score: number;
+  }[];
 
   if (products.length === 0) return 0;
 
   const update = db.prepare(`
-    UPDATE products SET retail_price = ?, updated_at = ? WHERE id = ?
+    UPDATE products
+    SET retail_price = ?, supplier_product_cost = ?, supplier_shipping_cost = ?, supplier_cost = ?, updated_at = ?
+    WHERE id = ?
   `);
 
   const now = new Date().toISOString();
   let count = 0;
 
-  const transaction = db.transaction(() => {
-    for (const p of products) {
-      const newPrice = calculateRetailPrice(p.supplier_cost, p.trend_score);
-      update.run(newPrice, now, p.id);
-      count++;
+  for (const p of products) {
+    let productCost = p.supplier_product_cost;
+    if (productCost <= 0) {
+      productCost =
+        p.supplier_shipping_cost > 0
+          ? Math.max(0, p.supplier_cost - p.supplier_shipping_cost)
+          : p.supplier_cost;
     }
-  });
 
-  transaction();
+    let shippingCost = p.supplier_shipping_cost;
+    if (p.supplier_vid) {
+      try {
+        const estimate = await estimateCjShipping([{ vid: p.supplier_vid, quantity: 1 }]);
+        if (estimate) shippingCost = estimate.shippingCost;
+      } catch {
+        shippingCost = shippingCost > 0 ? shippingCost : defaultCjShippingEstimate();
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    } else if (shippingCost <= 0) {
+      shippingCost = defaultCjShippingEstimate();
+    }
 
-  await logAutomation("price_stock_update", "success", `Updated ${count} product prices`);
+    const landedCost = landedSupplierCost(productCost, shippingCost);
+    const newPrice = calculateRetailPrice(landedCost, p.trend_score);
+    update.run(newPrice, productCost, shippingCost, landedCost, now, p.id);
+    count++;
+  }
+
+  await logAutomation(
+    "price_stock_update",
+    "success",
+    `Updated ${count} product prices (CJ shipping included)`
+  );
   return count;
 }

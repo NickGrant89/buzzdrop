@@ -10,6 +10,8 @@ export type Product = {
   image_url: string;
   category: string;
   supplier_cost: number;
+  supplier_product_cost: number;
+  supplier_shipping_cost: number;
   retail_price: number;
   trend_score: number;
   supplier_sku: string;
@@ -207,6 +209,18 @@ function migrateSchema(database: Database.Database) {
   if (!productCols.includes("supplier_vid")) {
     database.exec("ALTER TABLE products ADD COLUMN supplier_vid TEXT NOT NULL DEFAULT ''");
   }
+  if (!productCols.includes("supplier_product_cost")) {
+    database.exec("ALTER TABLE products ADD COLUMN supplier_product_cost REAL NOT NULL DEFAULT 0");
+  }
+  if (!productCols.includes("supplier_shipping_cost")) {
+    database.exec("ALTER TABLE products ADD COLUMN supplier_shipping_cost REAL NOT NULL DEFAULT 0");
+  }
+
+  database.exec(`
+    UPDATE products
+    SET supplier_product_cost = supplier_cost
+    WHERE supplier_product_cost = 0 AND supplier_cost > 0
+  `);
 
   const orderCols = (
     database.prepare("PRAGMA table_info(orders)").all() as { name: string }[]

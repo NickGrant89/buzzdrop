@@ -1,6 +1,10 @@
 const DEFAULT_MARKUP = 2.8;
 const MIN_MARGIN_PERCENT = 55;
 
+export function landedSupplierCost(productCost: number, shippingCost: number): number {
+  return Math.round((productCost + shippingCost) * 100) / 100;
+}
+
 export function calculateRetailPrice(supplierCost: number, trendScore: number): number {
   const trendMultiplier = 1 + Math.min(trendScore, 100) / 200;
   const raw = supplierCost * DEFAULT_MARKUP * trendMultiplier;

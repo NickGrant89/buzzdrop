@@ -139,7 +139,7 @@ export async function createOrderPayment(items: CheckoutItem[], details: UkCheck
   const paymentIntent = await stripe.paymentIntents.create({
     amount,
     currency: storeConfig.currency.toLowerCase(),
-    payment_method_types: ["card"],
+    automatic_payment_methods: { enabled: true },
     receipt_email: details.email,
     metadata: {
       order_id: orderId,

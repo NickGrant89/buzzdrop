@@ -81,7 +81,7 @@ function PaymentForm({ checkout }: { checkout: CheckoutPayload }) {
       <PaymentElement
         options={{
           layout: "tabs",
-          wallets: { applePay: "never", googlePay: "never" },
+          wallets: { applePay: "auto", googlePay: "never" },
         }}
       />
 

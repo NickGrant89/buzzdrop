@@ -38,6 +38,11 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               <p className="text-sm font-semibold text-white">Help</p>
               <ul className="mt-3 space-y-2 text-sm text-zinc-500">
                 <li>
+                  <Link href="/track-order" className="hover:text-zinc-300">
+                    Track order
+                  </Link>
+                </li>
+                <li>
                   <Link href="/returns" className="hover:text-zinc-300">
                     Returns &amp; refunds
                   </Link>

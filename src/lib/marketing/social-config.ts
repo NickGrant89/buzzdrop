@@ -1,4 +1,4 @@
-export type SocialPlatform = "webhook" | "pinterest" | "facebook";
+export type SocialPlatform = "webhook" | "pinterest" | "facebook" | "instagram";
 
 export function getEnabledPlatforms(): SocialPlatform[] {
   const raw = process.env.SOCIAL_PLATFORMS ?? "webhook";
@@ -6,7 +6,7 @@ export function getEnabledPlatforms(): SocialPlatform[] {
     .split(",")
     .map((p) => p.trim().toLowerCase())
     .filter((p): p is SocialPlatform =>
-      p === "webhook" || p === "pinterest" || p === "facebook"
+      p === "webhook" || p === "pinterest" || p === "facebook" || p === "instagram"
     );
 }
 
@@ -29,6 +29,7 @@ export function getSocialConfig() {
     if (platform === "webhook" && webhookUrl) platforms.push("webhook");
     if (platform === "pinterest" && pinterestToken && pinterestBoardId) platforms.push("pinterest");
     if (platform === "facebook" && metaPageToken && metaPageId) platforms.push("facebook");
+    if (platform === "instagram" && metaPageToken && metaPageId) platforms.push("instagram");
   }
 
   return {
@@ -44,6 +45,7 @@ export function getSocialConfig() {
       webhook: Boolean(webhookUrl),
       pinterest: Boolean(pinterestToken && pinterestBoardId),
       facebook: Boolean(metaPageToken && metaPageId),
+      instagram: Boolean(metaPageToken && metaPageId),
     },
   };
 }

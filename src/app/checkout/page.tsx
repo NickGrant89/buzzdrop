@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
+  ExpressCheckoutElement,
   PaymentElement,
   useElements,
   useStripe,
@@ -78,9 +79,40 @@ function PaymentForm({ checkout }: { checkout: CheckoutPayload }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 p-6">
+      <ExpressCheckoutElement
+        options={{
+          paymentMethods: {
+            applePay: "always",
+            googlePay: "never",
+            link: "never",
+          },
+          paymentMethodOrder: ["apple_pay", "card"],
+        }}
+        onConfirm={async () => {
+          if (!stripe || !elements) return;
+
+          setLoading(true);
+          setError("");
+
+          const { error: confirmError } = await stripe.confirmPayment({
+            elements,
+            confirmParams: {
+              return_url: `${window.location.origin}/order/success?order_id=${checkout.orderId}`,
+              receipt_email: checkout.email,
+            },
+          });
+
+          if (confirmError) {
+            setError(confirmError.message ?? "Payment failed");
+            setLoading(false);
+          }
+        }}
+      />
+
       <PaymentElement
         options={{
           layout: "tabs",
+          paymentMethodOrder: ["apple_pay", "card"],
           wallets: { applePay: "auto", googlePay: "never" },
         }}
       />
@@ -142,6 +174,7 @@ export default function CheckoutPage() {
               options={{
                 clientSecret: checkout.clientSecret,
                 appearance: { theme: "stripe" },
+                locale: "en-GB",
               }}
             >
               <PaymentForm checkout={checkout} />

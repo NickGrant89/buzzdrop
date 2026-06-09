@@ -18,6 +18,7 @@ export type Product = {
   supplier_pid: string;
   supplier_vid: string;
   supplier_name: string;
+  tiktok_product_id: string;
   stock: number;
   is_active: number;
   created_at: string;
@@ -214,6 +215,9 @@ function migrateSchema(database: Database.Database) {
   }
   if (!productCols.includes("supplier_shipping_cost")) {
     database.exec("ALTER TABLE products ADD COLUMN supplier_shipping_cost REAL NOT NULL DEFAULT 0");
+  }
+  if (!productCols.includes("tiktok_product_id")) {
+    database.exec("ALTER TABLE products ADD COLUMN tiktok_product_id TEXT NOT NULL DEFAULT ''");
   }
 
   database.exec(`

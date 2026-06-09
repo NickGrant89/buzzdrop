@@ -30,12 +30,16 @@ export function getStoreStats() {
   };
   const orders = db.prepare("SELECT COUNT(*) as count FROM orders").get() as { count: number };
   const revenue = db
-    .prepare("SELECT COALESCE(SUM(total), 0) as total FROM orders WHERE status != 'failed'")
+    .prepare(
+      `SELECT COALESCE(SUM(total), 0) as total FROM orders
+       WHERE status IN ('paid', 'fulfilled', 'shipped')`
+    )
     .get() as { total: number };
   const profit = db
     .prepare(
       `SELECT COALESCE(SUM((oi.unit_price - oi.supplier_cost) * oi.quantity), 0) as profit
-       FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.status != 'failed'`
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+       WHERE o.status IN ('paid', 'fulfilled', 'shipped')`
     )
     .get() as { profit: number };
 

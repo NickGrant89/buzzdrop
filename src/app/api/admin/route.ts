@@ -8,6 +8,7 @@ import { testCjConnection } from "@/lib/suppliers/cj/client";
 import { isStripeConfigured } from "@/lib/stripe";
 import { getSocialConfig, isSocialPostingEnabled } from "@/lib/marketing/social-config";
 import { getRecentSocialPosts, previewNextSocialPost } from "@/lib/automation/social-poster";
+import { syncProductsToTikTokShop } from "../tiktok-shop/sync";
 
 export async function GET() {
   const stats = getStoreStats();
@@ -104,6 +105,11 @@ export async function POST(request: Request) {
 
   if (body.action === "test_cj") {
     const result = await testCjConnection();
+    return NextResponse.json(result);
+  }
+
+  if (body.action === "delete_pending_orders") {
+    const result = await deletePendingOrdersWithLog();
     return NextResponse.json(result);
   }
 

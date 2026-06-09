@@ -6,6 +6,7 @@ import { getSocialConfig, isSocialPostingEnabled, type SocialPlatform } from "..
 import { postToWebhook } from "../marketing/platforms/webhook";
 import { postToPinterest } from "../marketing/platforms/pinterest";
 import { postToFacebookPage } from "../marketing/platforms/facebook";
+import { postToInstagram } from "../marketing/platforms/instagram";
 
 export type SocialPost = {
   id: string;
@@ -58,6 +59,8 @@ async function postToPlatform(
       return postToPinterest(config.pinterestToken, config.pinterestBoardId, payload);
     case "facebook":
       return postToFacebookPage(config.metaPageId, config.metaPageToken, payload);
+    case "instagram":
+      return postToInstagram(config.metaPageId, config.metaPageToken, payload);
   }
 }
 

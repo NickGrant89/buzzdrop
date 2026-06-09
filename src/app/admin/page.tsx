@@ -15,6 +15,7 @@ import {
   LogOut,
   Sparkles,
   Megaphone,
+  Trash2,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
@@ -112,6 +113,24 @@ export default function AdminPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "toggle_social", enabled: !data.socialPostingEnabled }),
+    });
+    await fetchData();
+  }
+
+  async function deletePendingOrders() {
+    const pending = data?.recentOrders.filter((o) => o.status === "pending").length ?? 0;
+    if (pending === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${pending} pending unpaid order(s)? This cannot be undone. Paid and fulfilled orders are kept.`
+      )
+    ) {
+      return;
+    }
+    await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_pending_orders" }),
     });
     await fetchData();
   }
@@ -263,7 +282,7 @@ export default function AdminPage() {
               <p className="text-sm text-zinc-400">
                 {data.social.enabled
                   ? `Active on ${data.social.platforms.join(", ") || "no platforms"} · ${data.social.schedule}`
-                  : "Add SOCIAL_WEBHOOK_URL or platform tokens to .env.local"}
+                  : "Add SOCIAL_WEBHOOK_URL in Railway (Zapier or Make webhook) to start posting"}
               </p>
               {data.socialLastRun && (
                 <p className="mt-1 text-xs text-zinc-600">
@@ -283,6 +302,20 @@ export default function AdminPage() {
               {data.socialPostingEnabled ? "Posting enabled" : "Posting paused"}
             </button>
           </div>
+
+          {!data.social.configured.webhook &&
+            !data.social.configured.pinterest &&
+            !data.social.configured.facebook && (
+              <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-zinc-300">
+                <p className="font-medium text-amber-200">Quick setup (Zapier or Make)</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-zinc-400">
+                  <li>Create a scenario with a <strong className="text-zinc-300">Webhook</strong> trigger (Catch Hook).</li>
+                  <li>Copy the webhook URL into Railway: <code className="text-violet-300">SOCIAL_WEBHOOK_URL</code></li>
+                  <li>Add actions to post to Instagram, Facebook, X, etc.</li>
+                  <li>Redeploy, then click <strong className="text-zinc-300">Post to Social</strong> below to test.</li>
+                </ol>
+              </div>
+            )}
 
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             {(
@@ -442,7 +475,20 @@ export default function AdminPage() {
 
         {/* Recent orders */}
         <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">Recent Orders</h2>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-semibold text-white">Recent Orders</h2>
+            {(data.recentOrders.filter((o) => o.status === "pending").length ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={deletePendingOrders}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm text-red-300 hover:bg-red-500/20"
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove pending demo orders (
+                {data.recentOrders.filter((o) => o.status === "pending").length})
+              </button>
+            )}
+          </div>
           {data.recentOrders.length === 0 ? (
             <p className="text-sm text-zinc-500">No orders yet — place a demo order from the cart</p>
           ) : (

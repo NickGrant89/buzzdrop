@@ -41,7 +41,7 @@ type AdminData = {
   social: {
     enabled: boolean;
     platforms: string[];
-    configured: { webhook: boolean; pinterest: boolean; facebook: boolean };
+    configured: { webhook: boolean; pinterest: boolean; facebook: boolean; instagram: boolean };
     schedule: string;
     preview: { title: string; caption: string; productUrl: string } | null;
     recentPosts: Array<{
@@ -63,6 +63,12 @@ type AdminData = {
     tracking_number: string | null;
     created_at: string;
   }>;
+  tiktokShop: {
+    configured: boolean;
+    connected: boolean;
+    message: string;
+    syncedCount: number;
+  };
 };
 
 export default function AdminPage() {
@@ -86,7 +92,7 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  async function runJob(job: "sync" | "pricing" | "fulfillment" | "tidy" | "social") {
+  async function runJob(job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop") {
     setRunningJob(job);
     await fetch("/api/admin", {
       method: "POST",
@@ -162,6 +168,7 @@ export default function AdminPage() {
   const jobs = [
     { id: "sync" as const, label: "Sync Trending Products", icon: RefreshCw, desc: "Import viral products" },
     { id: "social" as const, label: "Post to Social", icon: Megaphone, desc: "Share next trending product" },
+    { id: "tiktok_shop" as const, label: "Sync TikTok Shop", icon: RefreshCw, desc: "Push products to TikTok Shop" },
     { id: "tidy" as const, label: "Tidy Product Catalog", icon: Sparkles, desc: "Clean titles, categories & hide demos" },
     { id: "pricing" as const, label: "Update Prices & Stock", icon: DollarSign, desc: "Recalculate margins" },
     { id: "fulfillment" as const, label: "Process Fulfillment", icon: Truck, desc: "Submit orders to supplier" },
@@ -305,24 +312,32 @@ export default function AdminPage() {
 
           {!data.social.configured.webhook &&
             !data.social.configured.pinterest &&
-            !data.social.configured.facebook && (
+            !data.social.configured.facebook &&
+            !data.social.configured.instagram && (
               <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-zinc-300">
-                <p className="font-medium text-amber-200">Quick setup (Zapier or Make)</p>
+                <p className="font-medium text-amber-200">Option A — Make.com (Instagram + Facebook + TikTok)</p>
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-zinc-400">
-                  <li>Create a scenario with a <strong className="text-zinc-300">Webhook</strong> trigger (Catch Hook).</li>
-                  <li>Copy the webhook URL into Railway: <code className="text-violet-300">SOCIAL_WEBHOOK_URL</code></li>
-                  <li>Add actions to post to Instagram, Facebook, X, etc.</li>
-                  <li>Redeploy, then click <strong className="text-zinc-300">Post to Social</strong> below to test.</li>
+                  <li>Create a Make scenario → <strong className="text-zinc-300">Webhooks → Custom webhook</strong>.</li>
+                  <li>Add Railway variable: <code className="text-violet-300">SOCIAL_WEBHOOK_URL</code></li>
+                  <li>Add modules: <strong className="text-zinc-300">Facebook Pages → Create a Post</strong>, <strong className="text-zinc-300">Instagram → Create a Post</strong>, <strong className="text-zinc-300">TikTok → Upload Video/Photo</strong> (map fields from webhook JSON: caption, image_url, product_url).</li>
+                  <li>Test with <strong className="text-zinc-300">Post to Social</strong> below.</li>
                 </ol>
+                <p className="mt-4 font-medium text-amber-200">Option B — Direct Meta API (Instagram + Facebook)</p>
+                <p className="mt-1 text-zinc-400">
+                  Add <code className="text-violet-300">META_PAGE_ID</code>,{" "}
+                  <code className="text-violet-300">META_PAGE_ACCESS_TOKEN</code>, and set{" "}
+                  <code className="text-violet-300">SOCIAL_PLATFORMS=webhook,facebook,instagram</code> in Railway.
+                </p>
               </div>
             )}
 
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             {(
               [
-                ["Webhook (Zapier/Make)", data.social.configured.webhook],
-                ["Pinterest", data.social.configured.pinterest],
+                ["Webhook (Make)", data.social.configured.webhook],
                 ["Facebook Page", data.social.configured.facebook],
+                ["Instagram", data.social.configured.instagram],
+                ["Pinterest", data.social.configured.pinterest],
               ] as const
             ).map(([label, ok]) => (
               <span
@@ -373,6 +388,64 @@ export default function AdminPage() {
                 ))}
               </ul>
             </div>
+          )}
+        </div>
+
+        {/* TikTok Shop */}
+        <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">TikTok Shop Sync</h2>
+              <p className="text-sm text-zinc-400">{data.tiktokShop.message}</p>
+              {data.tiktokShop.configured && (
+                <p className="mt-1 text-xs text-zinc-600">
+                  {data.tiktokShop.syncedCount} product(s) listed on TikTok Shop · auto-sync 04:00 daily
+                </p>
+              )}
+            </div>
+            {data.tiktokShop.configured && (
+              <span
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${
+                  data.tiktokShop.connected
+                    ? "bg-emerald-500/10 text-emerald-400"
+                    : "bg-amber-500/10 text-amber-400"
+                }`}
+              >
+                {data.tiktokShop.connected ? (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Connected
+                  </>
+                ) : (
+                  "Not connected"
+                )}
+              </span>
+            )}
+          </div>
+          {!data.tiktokShop.configured && (
+            <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-zinc-400">
+              <li>
+                Register at{" "}
+                <a
+                  href="https://partner.tiktokshop.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-violet-400 hover:text-violet-300"
+                >
+                  TikTok Shop Partner Center
+                </a>{" "}
+                and create an app (UK seller account required).
+              </li>
+              <li>Complete OAuth and copy app key, secret, access token, and shop cipher.</li>
+              <li>
+                Add Railway vars: <code className="text-violet-300">TIKTOK_SHOP_APP_KEY</code>,{" "}
+                <code className="text-violet-300">TIKTOK_SHOP_APP_SECRET</code>,{" "}
+                <code className="text-violet-300">TIKTOK_SHOP_ACCESS_TOKEN</code>,{" "}
+                <code className="text-violet-300">TIKTOK_SHOP_CIPHER</code>,{" "}
+                <code className="text-violet-300">TIKTOK_SHOP_DEFAULT_CATEGORY_ID</code>
+              </li>
+              <li>Run <strong className="text-zinc-300">Sync TikTok Shop</strong> below (5 products per run).</li>
+            </ol>
           )}
         </div>
 

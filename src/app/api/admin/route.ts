@@ -8,7 +8,8 @@ import { testCjConnection } from "@/lib/suppliers/cj/client";
 import { isStripeConfigured } from "@/lib/stripe";
 import { getSocialConfig, isSocialPostingEnabled } from "@/lib/marketing/social-config";
 import { getRecentSocialPosts, previewNextSocialPost } from "@/lib/automation/social-poster";
-import { syncProductsToTikTokShop } from "../tiktok-shop/sync";
+import { deletePendingOrdersWithLog } from "@/lib/orders-maintenance";
+import { testTikTokShopConnection, isTikTokShopConfigured } from "@/lib/tiktok-shop/client";
 
 export async function GET() {
   const stats = getStoreStats();
@@ -55,6 +56,28 @@ export async function GET() {
   const socialConfig = getSocialConfig();
   const preview = previewNextSocialPost();
 
+  let tiktokShop = {
+    configured: isTikTokShopConfigured(),
+    connected: false,
+    message: "Not configured",
+    syncedCount: 0,
+  };
+
+  if (isTikTokShopConfigured()) {
+    const test = await testTikTokShopConnection();
+    const syncedCount = (
+      db.prepare("SELECT COUNT(*) as c FROM products WHERE tiktok_product_id != ''").get() as {
+        c: number;
+      }
+    ).c;
+    tiktokShop = {
+      configured: true,
+      connected: test.connected,
+      message: test.message,
+      syncedCount,
+    };
+  }
+
   return NextResponse.json({
     stats,
     logs,
@@ -79,6 +102,7 @@ export async function GET() {
         : null,
       recentPosts: getRecentSocialPosts(8),
     },
+    tiktokShop,
   });
 }
 
@@ -98,7 +122,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "run_job") {
-    const job = body.job as "sync" | "pricing" | "fulfillment" | "tidy" | "social";
+    const job = body.job as "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop";
     const result = await runJobManually(job);
     return NextResponse.json(result);
   }

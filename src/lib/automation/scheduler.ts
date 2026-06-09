@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { syncTrendingProducts, tidyProductCatalog, updatePricesAndStock } from "./trend-scraper";
 import { runSocialPosting } from "./social-poster";
 import { fulfillPendingOrders, markShippedOrders } from "./fulfillment";
+import { syncProductsToTikTokShop } from "../tiktok-shop/sync";
 import { logAutomation } from "./logger";
 import { getSetting, setSetting } from "../db";
 
@@ -41,6 +42,14 @@ async function runSocialPostJob() {
   }
 }
 
+async function runTikTokShopSync() {
+  try {
+    await syncProductsToTikTokShop(5);
+  } catch (err) {
+    await logAutomation("tiktok_shop_sync", "error", String(err));
+  }
+}
+
 export function startAutomationScheduler() {
   if (started) return;
 
@@ -63,6 +72,7 @@ export function startAutomationScheduler() {
   cron.schedule("*/5 * * * *", runFulfillment);
   cron.schedule("0 10 * * *", runSocialPostJob);
   cron.schedule("0 18 * * *", runSocialPostJob);
+  cron.schedule("0 4 * * *", runTikTokShopSync);
 
   setSetting("scheduler_started_at", new Date().toISOString());
   console.log("[BuzzDrop] Automation scheduler started");
@@ -70,13 +80,14 @@ export function startAutomationScheduler() {
   console.log("  - Price/stock update: every 2 hours");
   console.log("  - Order fulfillment: every 5 minutes");
   console.log("  - Social marketing: 10:00 & 18:00 daily");
+  console.log("  - TikTok Shop sync: 04:00 daily");
 
   // Defer first sync so the HTTP server can respond immediately on deploy
   setTimeout(() => void runProductSync(), 10_000);
 }
 
 export async function runJobManually(
-  job: "sync" | "pricing" | "fulfillment" | "tidy" | "social"
+  job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop"
 ): Promise<{ success: boolean; message: string }> {
   try {
     switch (job) {
@@ -109,6 +120,15 @@ export async function runJobManually(
         const fulfilled = await fulfillPendingOrders();
         const shipped = await markShippedOrders();
         return { success: true, message: `Fulfilled ${fulfilled}, shipped ${shipped}` };
+      }
+      case "tiktok_shop": {
+        const result = await syncProductsToTikTokShop(5);
+        return {
+          success: result.errors.length === 0 || result.created > 0,
+          message: `TikTok Shop: ${result.created} created, ${result.skipped} skipped${
+            result.errors.length ? `, ${result.errors.length} errors` : ""
+          }`,
+        };
       }
     }
   } catch (err) {

@@ -101,7 +101,7 @@ export async function runSocialPosting(): Promise<{
     return {
       posted: 0,
       failed: 0,
-      skipped: "No platforms configured — add SOCIAL_WEBHOOK_URL or platform tokens to .env.local",
+      skipped: "No platforms configured — add SOCIAL_WEBHOOK_URL in Railway and redeploy",
     };
   }
 
@@ -112,7 +112,7 @@ export async function runSocialPosting(): Promise<{
     const product = getNextProductForSocial(config.repostAfterDays);
     if (!product) {
       await logAutomation("social_post", "success", "All products recently posted — waiting for rotation");
-      break;
+      return { posted: 0, failed: 0, skipped: "All products posted in the last 14 days — use Test Make Webhook or wait for rotation" };
     }
 
     const payload = buildMarketingPost(product);
@@ -164,6 +164,46 @@ export async function runSocialPosting(): Promise<{
   }
 
   return { posted, failed, skipped: "" };
+}
+
+/** Fire the Make/Zapier webhook once without recording a social post (for setup/testing). */
+export async function testSocialWebhook(): Promise<{ success: boolean; message: string }> {
+  const config = getSocialConfig();
+  if (!config.webhookUrl) {
+    return {
+      success: false,
+      message: "SOCIAL_WEBHOOK_URL is missing in Railway — add your Make.com webhook URL and redeploy",
+    };
+  }
+
+  const product = getNextProductForSocial(0) ?? (
+    db
+      .prepare("SELECT * FROM products WHERE is_active = 1 ORDER BY trend_score DESC LIMIT 1")
+      .get() as Product | undefined
+  );
+
+  const payload = product
+    ? buildMarketingPost(product)
+    : {
+        title: "BuzzDrop Test Product",
+        caption: "Test post from BuzzDrop admin — your Make webhook is working.",
+        hashtags: "#buzzdrop #test",
+        productUrl: "https://www.buzzdrop.co.uk",
+        imageUrl: "https://www.buzzdrop.co.uk/og-image.png",
+        priceLabel: "£9.99",
+        category: "Test",
+      };
+
+  try {
+    await postToWebhook(config.webhookUrl, product?.id ?? "test", payload);
+    return {
+      success: true,
+      message: "Webhook sent to Make — open your scenario and click Redetermine data structure",
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, message };
+  }
 }
 
 export function getRecentSocialPosts(limit = 10): SocialPost[] {

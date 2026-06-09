@@ -7,7 +7,7 @@ import { isCjConfigured } from "@/lib/config";
 import { testCjConnection } from "@/lib/suppliers/cj/client";
 import { isStripeConfigured } from "@/lib/stripe";
 import { getSocialConfig, isSocialPostingEnabled } from "@/lib/marketing/social-config";
-import { getRecentSocialPosts, previewNextSocialPost } from "@/lib/automation/social-poster";
+import { getRecentSocialPosts, previewNextSocialPost, testSocialWebhook } from "@/lib/automation/social-poster";
 import { deletePendingOrdersWithLog } from "@/lib/orders-maintenance";
 import { testTikTokShopConnection, isTikTokShopConfigured } from "@/lib/tiktok-shop/client";
 
@@ -134,6 +134,11 @@ export async function POST(request: Request) {
 
   if (body.action === "delete_pending_orders") {
     const result = await deletePendingOrdersWithLog();
+    return NextResponse.json(result);
+  }
+
+  if (body.action === "test_social_webhook") {
+    const result = await testSocialWebhook();
     return NextResponse.json(result);
   }
 

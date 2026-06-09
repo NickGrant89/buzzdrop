@@ -105,7 +105,7 @@ export async function runJobManually(
       case "social": {
         const result = await runSocialPosting();
         if (result.skipped) {
-          return { success: true, message: result.skipped };
+          return { success: false, message: result.skipped };
         }
         return {
           success: result.failed === 0,

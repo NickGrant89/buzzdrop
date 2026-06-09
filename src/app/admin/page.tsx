@@ -75,6 +75,8 @@ export default function AdminPage() {
   const [data, setData] = useState<AdminData | null>(null);
   const [loading, setLoading] = useState(true);
   const [runningJob, setRunningJob] = useState<string | null>(null);
+  const [jobMessage, setJobMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testingWebhook, setTestingWebhook] = useState(false);
 
   const fetchData = useCallback(async () => {
     const res = await fetch("/api/admin");
@@ -94,13 +96,38 @@ export default function AdminPage() {
 
   async function runJob(job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop") {
     setRunningJob(job);
-    await fetch("/api/admin", {
+    setJobMessage(null);
+    const res = await fetch("/api/admin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "run_job", job }),
     });
+    const result = await res.json().catch(() => ({}));
+    if (result.message) {
+      setJobMessage({ ok: result.success !== false, text: result.message });
+    } else if (result.skipped) {
+      setJobMessage({ ok: false, text: result.skipped });
+    } else if (result.error) {
+      setJobMessage({ ok: false, text: result.error });
+    }
     await fetchData();
     setRunningJob(null);
+  }
+
+  async function testMakeWebhook() {
+    setTestingWebhook(true);
+    setJobMessage(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "test_social_webhook" }),
+    });
+    const result = await res.json();
+    setJobMessage({
+      ok: result.success === true,
+      text: result.message ?? (result.success ? "Webhook sent" : "Webhook failed"),
+    });
+    setTestingWebhook(false);
   }
 
   async function toggleAutomation() {
@@ -308,7 +335,27 @@ export default function AdminPage() {
             >
               {data.socialPostingEnabled ? "Posting enabled" : "Posting paused"}
             </button>
+            <button
+              type="button"
+              onClick={testMakeWebhook}
+              disabled={testingWebhook}
+              className="rounded-full border border-violet-500/40 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-300 hover:bg-violet-500/20 disabled:opacity-50"
+            >
+              {testingWebhook ? "Sending…" : "Test Make Webhook"}
+            </button>
           </div>
+
+          {jobMessage && (
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                jobMessage.ok
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {jobMessage.text}
+            </div>
+          )}
 
           {!data.social.configured.webhook &&
             !data.social.configured.pinterest &&
@@ -320,7 +367,7 @@ export default function AdminPage() {
                   <li>Create a Make scenario → <strong className="text-zinc-300">Webhooks → Custom webhook</strong>.</li>
                   <li>Add Railway variable: <code className="text-violet-300">SOCIAL_WEBHOOK_URL</code></li>
                   <li>Add modules: <strong className="text-zinc-300">Facebook Pages → Create a Post</strong>, <strong className="text-zinc-300">Instagram → Create a Post</strong>, <strong className="text-zinc-300">TikTok → Upload Video/Photo</strong> (map fields from webhook JSON: caption, image_url, product_url).</li>
-                  <li>Test with <strong className="text-zinc-300">Post to Social</strong> below.</li>
+                  <li>Test with <strong className="text-zinc-300">Test Make Webhook</strong> (sends sample data without posting).</li>
                 </ol>
                 <p className="mt-4 font-medium text-amber-200">Option B — Direct Meta API (Instagram + Facebook)</p>
                 <p className="mt-1 text-zinc-400">

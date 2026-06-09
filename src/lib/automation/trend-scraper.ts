@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../db";
-import { calculateRetailPrice, landedSupplierCost } from "./pricing";
+import { calculateRetailPriceWithShipping, landedSupplierCost } from "./pricing";
 import { logAutomation } from "./logger";
 import { isCjConfigured, defaultCjShippingEstimate } from "../config";
 import { fetchCjTrendingProductsWithMeta } from "../suppliers/cj/products";
@@ -77,7 +77,11 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
       const category = normalizeStoreCategory(raw.category);
       const supplierPid = raw.supplier_pid ?? "";
       const slug = buildProductSlug(title, supplierPid || undefined);
-      const retailPrice = calculateRetailPrice(raw.supplier_cost, raw.trend_score);
+      const retailPrice = calculateRetailPriceWithShipping(
+        raw.supplier_product_cost,
+        raw.supplier_shipping_cost,
+        raw.trend_score
+      );
 
       const payload = {
         slug,
@@ -261,7 +265,7 @@ export async function updatePricesAndStock(): Promise<number> {
     }
 
     const landedCost = landedSupplierCost(productCost, shippingCost);
-    const newPrice = calculateRetailPrice(landedCost, p.trend_score);
+    const newPrice = calculateRetailPriceWithShipping(productCost, shippingCost, p.trend_score);
     update.run(newPrice, productCost, shippingCost, landedCost, now, p.id);
     count++;
   }

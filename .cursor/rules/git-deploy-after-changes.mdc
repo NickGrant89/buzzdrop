@@ -1,0 +1,26 @@
+---
+description: Show git deploy commands after making code changes
+alwaysApply: true
+---
+
+# Git commands after updates
+
+When you finish a task that changed project files, end the response with a **Deploy** section containing copy-paste git commands.
+
+## Required format
+
+```bash
+cd ~/Projects/trenddrop
+git add .
+git commit -m "Short summary of what changed"
+git push origin main
+```
+
+- Write a clear, specific commit message (not "update" or "fix").
+- Mention Railway will auto-redeploy if the repo is connected.
+- Do **not** run commit/push unless the user explicitly asks — only show the commands.
+- Skip this section for question-only replies with no file changes.
+
+## Optional follow-up
+
+If env vars or admin actions are needed after deploy, list them after the git block.

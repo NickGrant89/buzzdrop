@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "eslint",
-    "generate:social": "node scripts/generate-facebook-assets.mjs"
+    "generate:social": "node scripts/generate-facebook-assets.mjs",
+    "generate:videos": "node scripts/generate-ad-videos.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.6.0",

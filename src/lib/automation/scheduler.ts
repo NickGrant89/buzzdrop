@@ -79,8 +79,9 @@ export function startAutomationScheduler() {
   cron.schedule(syncCron, runProductSync);
   cron.schedule("0 */2 * * *", runPriceUpdate);
   cron.schedule("*/5 * * * *", runFulfillment);
-  cron.schedule("0 10 * * *", runSocialPostJob);
-  cron.schedule("0 18 * * *", runSocialPostJob);
+  const tz = "Europe/London";
+  cron.schedule("0 10 * * *", runSocialPostJob, { timezone: tz });
+  cron.schedule("0 18 * * *", runSocialPostJob, { timezone: tz });
   cron.schedule("0 4 * * *", runTikTokShopSync);
   cron.schedule("0 5 * * *", runCatalogPrune);
 
@@ -90,7 +91,7 @@ export function startAutomationScheduler() {
   console.log("  - Catalog prune: 05:00 daily (0 views/orders after 30 days)");
   console.log("  - Price/stock update: every 2 hours");
   console.log("  - Order fulfillment: every 5 minutes");
-  console.log("  - Social marketing: 10:00 & 18:00 daily");
+  console.log(`  - Social marketing: 10:00 & 18:00 daily (${tz})`);
   console.log("  - TikTok Shop sync: 04:00 daily");
 
   setTimeout(() => void runProductSync(), 10_000);

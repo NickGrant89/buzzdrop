@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, getSetting, setSetting } from "@/lib/db";
 import { getStoreStats } from "@/lib/products";
+import { getHeroProducts } from "@/lib/hero-products";
 import { getRecentLogs } from "@/lib/automation/logger";
 import { runJobManually } from "@/lib/automation/scheduler";
 import { isCjConfigured } from "@/lib/config";
@@ -118,6 +119,20 @@ export async function GET() {
     recentOrders,
     cj: cjStatus,
     stripe,
+    heroProducts: getHeroProducts(3).map((h) => ({
+      id: h.product.id,
+      slug: h.product.slug,
+      title: h.product.title,
+      imageUrl: h.product.image_url,
+      retailPrice: h.product.retail_price,
+      marginGbp: h.marginGbp,
+      marginPercent: h.marginPercent,
+      trendScore: h.product.trend_score,
+      views: h.product.view_count ?? 0,
+      score: h.score,
+      reasons: h.reasons,
+      productUrl: `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "https://www.buzzdrop.co.uk"}/product/${h.product.slug}`,
+    })),
     social: {
       enabled: isSocialPostingEnabled() && socialPostingEnabled,
       platforms: socialConfig.platforms,

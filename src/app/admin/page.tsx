@@ -88,6 +88,20 @@ type AdminData = {
       sample: string[];
     };
   };
+  heroProducts: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    imageUrl: string;
+    retailPrice: number;
+    marginGbp: number;
+    marginPercent: number;
+    trendScore: number;
+    views: number;
+    score: number;
+    reasons: string[];
+    productUrl: string;
+  }>;
 };
 
 export default function AdminPage() {
@@ -517,6 +531,42 @@ export default function AdminPage() {
             </ol>
           )}
         </div>
+
+        {/* Hero products — auto-picked for ads & TikTok */}
+        {data.heroProducts.length > 0 && (
+          <div className="mb-8 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
+            <h2 className="text-lg font-semibold text-white">Hero Products</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Auto-picked for Meta ads & TikTok — best margin, trend score, and £15–£45 price band
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              {data.heroProducts.map((hero, i) => (
+                <div
+                  key={hero.id}
+                  className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+                >
+                  <p className="text-xs font-medium uppercase tracking-wide text-amber-400">
+                    Hero #{i + 1} · score {hero.score}
+                  </p>
+                  <p className="mt-2 line-clamp-2 font-medium text-white">{hero.title}</p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    {formatPrice(hero.retailPrice)} · £{hero.marginGbp.toFixed(2)} margin (
+                    {hero.marginPercent}%)
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">{hero.reasons.join(" · ")}</p>
+                  <a
+                    href={hero.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-block text-sm text-violet-400 hover:text-violet-300"
+                  >
+                    View product →
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">

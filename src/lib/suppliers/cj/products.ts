@@ -1,5 +1,6 @@
 import { cjAuthenticatedFetch } from "./client";
 import { cjConfig, defaultCjShippingEstimate, usdToStoreCurrency } from "@/lib/config";
+import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
 import { landedSupplierCost } from "@/lib/automation/pricing";
 import { normalizeCjProduct } from "@/lib/product-normalize";
 import { estimateCjShipping } from "./shipping";
@@ -93,7 +94,12 @@ type ListStrategy = {
   parse: (data: unknown) => { pid: string; seed?: ListProduct | ListV2Product }[];
 };
 
-const TRENDING_KEYWORDS = ["phone", "kitchen", "led", "pet", "beauty", "home"];
+const TRENDING_KEYWORDS_FALLBACK = ["phone", "kitchen", "led", "pet", "beauty", "home"];
+
+function getSearchKeywords(keywords?: string[]): string[] {
+  const list = keywords?.length ? keywords : trendDiscoveryConfig.baseKeywords;
+  return list.length > 0 ? list : TRENDING_KEYWORDS_FALLBACK;
+}
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -162,7 +168,8 @@ function parseListV2(data: unknown): { pid: string; seed?: ListV2Product }[] {
     .filter((x): x is { pid: string; seed: ListV2Product } => x !== null);
 }
 
-async function fetchWithStrategies(limit: number): Promise<{ pid: string; seed?: ListProduct | ListV2Product }[]> {
+async function fetchWithStrategies(limit: number, keywords?: string[]): Promise<{ pid: string; seed?: ListProduct | ListV2Product }[]> {
+  const searchKeywords = getSearchKeywords(keywords);
   const pageSize = String(Math.min(limit, 50));
   const strategies: ListStrategy[] = [
     {
@@ -192,7 +199,7 @@ async function fetchWithStrategies(limit: number): Promise<{ pid: string; seed?:
       path: `/product/listV2?${new URLSearchParams({
         page: "1",
         size: pageSize,
-        keyWord: "phone",
+        keyWord: searchKeywords[0] ?? "phone",
         orderBy: "1",
         sort: "desc",
       })}`,
@@ -211,7 +218,7 @@ async function fetchWithStrategies(limit: number): Promise<{ pid: string; seed?:
     },
   ];
 
-  for (const keyword of TRENDING_KEYWORDS.slice(1)) {
+  for (const keyword of searchKeywords.slice(1)) {
     strategies.push({
       name: `keyword-${keyword}`,
       path: `/product/listV2?${new URLSearchParams({
@@ -360,8 +367,11 @@ export async function fetchCjTrendingProducts(limit = 24): Promise<CjProductForI
   return products;
 }
 
-export async function fetchCjTrendingProductsWithMeta(limit = 24): Promise<FetchCjResult> {
-  const candidates = await fetchWithStrategies(limit);
+export async function fetchCjTrendingProductsWithMeta(
+  limit = 24,
+  keywords?: string[]
+): Promise<FetchCjResult> {
+  const candidates = await fetchWithStrategies(limit, keywords);
   const products: CjProductForImport[] = [];
 
   for (const { pid, seed } of candidates.slice(0, limit)) {

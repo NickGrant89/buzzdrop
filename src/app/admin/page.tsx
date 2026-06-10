@@ -69,6 +69,24 @@ type AdminData = {
     message: string;
     syncedCount: number;
   };
+  automation: {
+    productSync: string;
+    priceStock: string;
+    fulfillment: string;
+    social: string;
+    catalogPrune: string;
+    syncLimit: number;
+    pruneAfterDays: number;
+    googleTrendsEnabled: boolean;
+    tiktokTrendsEnabled: boolean;
+    trendKeywords: {
+      count: number;
+      google: number;
+      tiktok: number;
+      refreshedAt: string | null;
+      sample: string[];
+    };
+  };
 };
 
 export default function AdminPage() {
@@ -109,6 +127,8 @@ export default function AdminPage() {
       setJobMessage({ ok: false, text: result.skipped });
     } else if (result.error) {
       setJobMessage({ ok: false, text: result.error });
+    } else if (!res.ok) {
+      setJobMessage({ ok: false, text: `Request failed (${res.status})` });
     }
     await fetchData();
     setRunningJob(null);
@@ -233,6 +253,19 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {jobMessage && (
+          <div
+            id="admin-job-message"
+            className={`mb-8 rounded-xl border px-4 py-3 text-sm ${
+              jobMessage.ok
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+            }`}
+          >
+            {jobMessage.text}
+          </div>
+        )}
+
         {/* CJ Dropshipping connection */}
         <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -344,18 +377,6 @@ export default function AdminPage() {
               {testingWebhook ? "Sending…" : "Test Make Webhook"}
             </button>
           </div>
-
-          {jobMessage && (
-            <div
-              className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
-                jobMessage.ok
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-200"
-              }`}
-            >
-              {jobMessage.text}
-            </div>
-          )}
 
           {!data.social.configured.webhook &&
             !data.social.configured.pinterest &&
@@ -543,10 +564,11 @@ export default function AdminPage() {
             <ul className="space-y-3 text-sm">
               {(
                 [
-                  { label: "Product sync", schedule: "Every 6 hours", icon: RefreshCw },
-                  { label: "Price & stock update", schedule: "Every 2 hours", icon: DollarSign },
-                  { label: "Order fulfillment", schedule: "Every 5 minutes", icon: Truck },
-                  { label: "Social marketing", schedule: "10:00 & 18:00 daily", icon: Megaphone },
+                  { label: "Product sync", schedule: data.automation.productSync, icon: RefreshCw },
+                  { label: "Price & stock update", schedule: data.automation.priceStock, icon: DollarSign },
+                  { label: "Order fulfillment", schedule: data.automation.fulfillment, icon: Truck },
+                  { label: "Social marketing", schedule: data.automation.social, icon: Megaphone },
+                  { label: "Catalog prune", schedule: data.automation.catalogPrune, icon: Sparkles },
                 ] as const
               ).map(({ label, schedule, icon: Icon }) => (
                 <li key={label} className="flex items-center gap-3 text-zinc-400">
@@ -561,6 +583,34 @@ export default function AdminPage() {
                 Scheduler started: {new Date(data.schedulerStarted).toLocaleString()}
               </p>
             )}
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-400">
+              <p className="font-medium text-zinc-300">Trend discovery</p>
+              <p className="mt-1">
+                Sync limit: {data.automation.syncLimit} products · Prune after{" "}
+                {data.automation.pruneAfterDays} days
+              </p>
+              <p className="mt-1">
+                Keywords: {data.automation.trendKeywords.count || "—"} merged
+                {data.automation.trendKeywords.count > 0 && (
+                  <>
+                    {" "}
+                    (Google {data.automation.trendKeywords.google}, TikTok{" "}
+                    {data.automation.trendKeywords.tiktok})
+                  </>
+                )}
+              </p>
+              {data.automation.trendKeywords.sample.length > 0 && (
+                <p className="mt-1 text-zinc-500">
+                  {data.automation.trendKeywords.sample.join(", ")}
+                  {data.automation.trendKeywords.count > 8 ? "…" : ""}
+                </p>
+              )}
+              {data.automation.trendKeywords.count === 0 && (
+                <p className="mt-1 text-amber-400/90">
+                  Run Sync Trending Products to refresh Google/TikTok keywords
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Recent logs */}

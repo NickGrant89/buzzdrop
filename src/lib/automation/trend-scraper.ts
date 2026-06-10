@@ -3,8 +3,11 @@ import { db } from "../db";
 import { calculateRetailPriceWithShipping, landedSupplierCost } from "./pricing";
 import { logAutomation } from "./logger";
 import { isCjConfigured, defaultCjShippingEstimate } from "../config";
+import { trendDiscoveryConfig } from "../config/trend-discovery";
 import { fetchCjTrendingProductsWithMeta } from "../suppliers/cj/products";
 import { estimateCjShipping } from "../suppliers/cj/shipping";
+import { getTrendKeywords, applyTrendKeywordBoost } from "./trend-keywords";
+import { pruneLowPerformingProducts } from "./catalog-prune";
 import {
   buildProductSlug,
   normalizeProductDescription,
@@ -28,7 +31,10 @@ export type TrendingProductSource = {
   stock?: number;
 };
 
-function upsertProducts(allProducts: TrendingProductSource[]): { added: number; updated: number } {
+function upsertProducts(
+  allProducts: TrendingProductSource[],
+  trendKeywords: string[]
+): { added: number; updated: number } {
   const findByPid = db.prepare(
     "SELECT id, slug FROM products WHERE supplier_pid = ? AND supplier_pid != ''"
   );
@@ -77,10 +83,16 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
       const category = normalizeStoreCategory(raw.category);
       const supplierPid = raw.supplier_pid ?? "";
       const slug = buildProductSlug(title, supplierPid || undefined);
+      const trendScore = applyTrendKeywordBoost(
+        title,
+        description,
+        raw.trend_score,
+        trendKeywords
+      );
       const retailPrice = calculateRetailPriceWithShipping(
         raw.supplier_product_cost,
         raw.supplier_shipping_cost,
-        raw.trend_score
+        trendScore
       );
 
       const payload = {
@@ -93,7 +105,7 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
         supplier_product_cost: raw.supplier_product_cost,
         supplier_shipping_cost: raw.supplier_shipping_cost,
         retail_price: retailPrice,
-        trend_score: raw.trend_score,
+        trend_score: trendScore,
         supplier_sku: raw.supplier_sku,
         supplier_pid: supplierPid,
         supplier_vid: raw.supplier_vid ?? "",
@@ -120,10 +132,11 @@ function upsertProducts(allProducts: TrendingProductSource[]): { added: number; 
   return { added, updated };
 }
 
-/** Deactivate demo/legacy products and re-normalize CJ catalog copy. */
+/** Deactivate demo/legacy products, re-normalize copy, and prune low performers. */
 export function tidyProductCatalog(): {
   deactivated: number;
   updated: number;
+  pruned: number;
 } {
   const now = new Date().toISOString();
 
@@ -165,10 +178,17 @@ export function tidyProductCatalog(): {
   });
   transaction();
 
-  return { deactivated, updated };
+  const { pruned } = pruneLowPerformingProducts();
+
+  return { deactivated, updated, pruned };
 }
 
-export async function syncTrendingProducts(): Promise<{ added: number; updated: number; source: string }> {
+export async function syncTrendingProducts(): Promise<{
+  added: number;
+  updated: number;
+  source: string;
+  keywordsUsed: number;
+}> {
   if (!isCjConfigured()) {
     throw new Error(
       "CJ Dropshipping not configured. Add CJ_API_KEY (or CJ_EMAIL + CJ_PASSWORD) to .env.local."
@@ -176,7 +196,12 @@ export async function syncTrendingProducts(): Promise<{ added: number; updated: 
   }
 
   try {
-    const { products: cjProducts, candidatesFound } = await fetchCjTrendingProductsWithMeta(20);
+    const keywordSnapshot = await getTrendKeywords();
+    const syncLimit = trendDiscoveryConfig.syncLimit;
+    const { products: cjProducts, candidatesFound } = await fetchCjTrendingProductsWithMeta(
+      syncLimit,
+      keywordSnapshot.keywords
+    );
 
     if (cjProducts.length === 0 && candidatesFound === 0) {
       await logAutomation(
@@ -184,7 +209,7 @@ export async function syncTrendingProducts(): Promise<{ added: number; updated: 
         "error",
         "CJ catalog search returned 0 products — API may need product permissions enabled in CJ dashboard"
       );
-      return { added: 0, updated: 0, source: "cj" };
+      return { added: 0, updated: 0, source: "cj", keywordsUsed: keywordSnapshot.keywords.length };
     }
 
     if (cjProducts.length === 0) {
@@ -193,21 +218,25 @@ export async function syncTrendingProducts(): Promise<{ added: number; updated: 
         "error",
         `CJ found ${candidatesFound} products but could not load variants — retry in a minute`
       );
-      return { added: 0, updated: 0, source: "cj" };
+      return { added: 0, updated: 0, source: "cj", keywordsUsed: keywordSnapshot.keywords.length };
     }
 
     const result = upsertProducts(
       cjProducts.map((p) => ({
         ...p,
         supplier_name: "CJ Dropshipping (UK warehouse)",
-      }))
+      })),
+      keywordSnapshot.keywords
     );
+
+    const googleCount = keywordSnapshot.sources.google.length;
+    const tiktokCount = keywordSnapshot.sources.tiktok.length;
     await logAutomation(
       "product_sync",
       "success",
-      `CJ UK: synced ${cjProducts.length} products with shipping in prices (${result.added} new, ${result.updated} updated)`
+      `CJ UK: synced ${cjProducts.length} products (${result.added} new, ${result.updated} updated) · ${keywordSnapshot.keywords.length} keywords (Google ${googleCount}, TikTok ${tiktokCount})`
     );
-    return { ...result, source: "cj" };
+    return { ...result, source: "cj", keywordsUsed: keywordSnapshot.keywords.length };
   } catch (err) {
     await logAutomation("product_sync", "error", `CJ sync failed: ${String(err)}`);
     throw err;

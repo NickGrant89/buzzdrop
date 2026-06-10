@@ -41,7 +41,8 @@ Open [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 
 | Job | Schedule | Action |
 |-----|----------|--------|
-| Product sync | Every 6 hours | Fetches CJ trending products with UK inventory |
+| Product sync | Daily 03:00 (configurable) | Fetches CJ trending + Google/TikTok keywords |
+| Catalog prune | Daily 05:00 | Hides products with 0 views/orders after 30 days |
 | Price update | Every 2 hours | Recalculates GBP retail margins |
 | Fulfillment | Every 5 minutes | Creates CJ orders for paid orders |
 | Shipping | Every 5 minutes | Pulls tracking numbers from CJ |

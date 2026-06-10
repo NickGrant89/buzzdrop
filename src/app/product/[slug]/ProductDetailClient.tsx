@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Product } from "@/lib/db";
 import { useCart } from "@/context/CartContext";
 import { AddToCartButton } from "@/components/AddToCartButton";
@@ -9,6 +9,14 @@ import { Minus, Plus } from "lucide-react";
 export function ProductDetailClient({ product }: { product: Product }) {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    fetch("/api/products/view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId: product.id }),
+    }).catch(() => {});
+  }, [product.id]);
 
   return (
     <div className="space-y-4">

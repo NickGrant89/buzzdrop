@@ -10,6 +10,8 @@ import { getSocialConfig, isSocialPostingEnabled } from "@/lib/marketing/social-
 import { getRecentSocialPosts, previewNextSocialPost, testSocialWebhook } from "@/lib/automation/social-poster";
 import { deletePendingOrdersWithLog } from "@/lib/orders-maintenance";
 import { testTikTokShopConnection, isTikTokShopConfigured } from "@/lib/tiktok-shop/client";
+import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
+import { automationScheduleLabels } from "@/lib/automation/schedule-labels";
 
 export async function GET() {
   const stats = getStoreStats();
@@ -55,6 +57,34 @@ export async function GET() {
 
   const socialConfig = getSocialConfig();
   const preview = previewNextSocialPost();
+
+  let trendKeywords: {
+    count: number;
+    google: number;
+    tiktok: number;
+    refreshedAt: string | null;
+    sample: string[];
+  } = { count: 0, google: 0, tiktok: 0, refreshedAt: null, sample: [] };
+
+  try {
+    const raw = getSetting("trend_keywords_cache", "");
+    if (raw) {
+      const parsed = JSON.parse(raw) as {
+        keywords?: string[];
+        sources?: { google?: string[]; tiktok?: string[] };
+        refreshedAt?: string;
+      };
+      trendKeywords = {
+        count: parsed.keywords?.length ?? 0,
+        google: parsed.sources?.google?.length ?? 0,
+        tiktok: parsed.sources?.tiktok?.length ?? 0,
+        refreshedAt: parsed.refreshedAt ?? null,
+        sample: (parsed.keywords ?? []).slice(0, 8),
+      };
+    }
+  } catch {
+    /* ignore bad cache */
+  }
 
   let tiktokShop = {
     configured: isTikTokShopConfigured(),
@@ -103,6 +133,18 @@ export async function GET() {
       recentPosts: getRecentSocialPosts(8),
     },
     tiktokShop,
+    automation: {
+      productSync: automationScheduleLabels.productSync(trendDiscoveryConfig.syncCron),
+      priceStock: automationScheduleLabels.priceStock,
+      fulfillment: automationScheduleLabels.fulfillment,
+      social: automationScheduleLabels.social,
+      catalogPrune: automationScheduleLabels.catalogPrune,
+      syncLimit: trendDiscoveryConfig.syncLimit,
+      pruneAfterDays: trendDiscoveryConfig.pruneAfterDays,
+      googleTrendsEnabled: trendDiscoveryConfig.googleTrendsEnabled,
+      tiktokTrendsEnabled: trendDiscoveryConfig.tiktokTrendsEnabled,
+      trendKeywords,
+    },
   });
 }
 
@@ -122,7 +164,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "run_job") {
-    const job = body.job as "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop";
+    const job = body.job as "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop" | "prune";
     const result = await runJobManually(job);
     return NextResponse.json(result);
   }

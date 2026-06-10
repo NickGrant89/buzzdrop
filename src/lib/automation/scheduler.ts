@@ -5,6 +5,8 @@ import { fulfillPendingOrders, markShippedOrders } from "./fulfillment";
 import { syncProductsToTikTokShop } from "../tiktok-shop/sync";
 import { logAutomation } from "./logger";
 import { getSetting, setSetting } from "../db";
+import { trendDiscoveryConfig } from "../config/trend-discovery";
+import { pruneLowPerformingProductsWithLog } from "./catalog-prune";
 
 let started = false;
 
@@ -12,8 +14,15 @@ async function runProductSync() {
   try {
     await syncTrendingProducts();
   } catch (err) {
-    // syncTrendingProducts already logs errors
     console.error("[BuzzDrop] Product sync failed:", err);
+  }
+}
+
+async function runCatalogPrune() {
+  try {
+    await pruneLowPerformingProductsWithLog();
+  } catch (err) {
+    await logAutomation("catalog_prune", "error", String(err));
   }
 }
 
@@ -53,7 +62,6 @@ async function runTikTokShopSync() {
 export function startAutomationScheduler() {
   if (started) return;
 
-  // Vercel/serverless: use /api/cron/* + CRON_SECRET instead of in-process cron
   if (process.env.VERCEL === "1" || process.env.DISABLE_INTERNAL_CRON === "true") {
     console.log("[BuzzDrop] Internal cron disabled — use /api/cron/[job] endpoints");
     return;
@@ -67,39 +75,51 @@ export function startAutomationScheduler() {
     return;
   }
 
-  cron.schedule("0 */6 * * *", runProductSync);
+  const syncCron = trendDiscoveryConfig.syncCron;
+  cron.schedule(syncCron, runProductSync);
   cron.schedule("0 */2 * * *", runPriceUpdate);
   cron.schedule("*/5 * * * *", runFulfillment);
   cron.schedule("0 10 * * *", runSocialPostJob);
   cron.schedule("0 18 * * *", runSocialPostJob);
   cron.schedule("0 4 * * *", runTikTokShopSync);
+  cron.schedule("0 5 * * *", runCatalogPrune);
 
   setSetting("scheduler_started_at", new Date().toISOString());
   console.log("[BuzzDrop] Automation scheduler started");
-  console.log("  - Product sync: every 6 hours");
+  console.log(`  - Product sync: ${syncCron}`);
+  console.log("  - Catalog prune: 05:00 daily (0 views/orders after 30 days)");
   console.log("  - Price/stock update: every 2 hours");
   console.log("  - Order fulfillment: every 5 minutes");
   console.log("  - Social marketing: 10:00 & 18:00 daily");
   console.log("  - TikTok Shop sync: 04:00 daily");
 
-  // Defer first sync so the HTTP server can respond immediately on deploy
   setTimeout(() => void runProductSync(), 10_000);
 }
 
 export async function runJobManually(
-  job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop"
+  job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop" | "prune"
 ): Promise<{ success: boolean; message: string }> {
   try {
     switch (job) {
       case "sync": {
         const result = await syncTrendingProducts();
-        return { success: true, message: `Synced products: ${result.added} added, ${result.updated} updated` };
+        return {
+          success: true,
+          message: `Synced products: ${result.added} added, ${result.updated} updated (${result.keywordsUsed} trend keywords)`,
+        };
       }
       case "tidy": {
         const result = tidyProductCatalog();
         return {
           success: true,
-          message: `Tidied catalog: ${result.deactivated} demo products hidden, ${result.updated} CJ products cleaned`,
+          message: `Tidied catalog: ${result.deactivated} demo hidden, ${result.updated} cleaned, ${result.pruned} low performers hidden`,
+        };
+      }
+      case "prune": {
+        const result = await pruneLowPerformingProductsWithLog();
+        return {
+          success: true,
+          message: `Pruned catalog: ${result.pruned} inactive products hidden`,
         };
       }
       case "social": {

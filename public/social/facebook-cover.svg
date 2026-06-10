@@ -1,0 +1,34 @@
+<svg width="820" height="312" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="820" y2="312" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111113"/>
+      <stop offset="0.55" stop-color="#09090b"/>
+      <stop offset="1" stop-color="#050506"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="8" y1="4" x2="22" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="85%" cy="45%" r="45%">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="820" height="312" fill="url(#bg)"/>
+  <rect width="820" height="312" fill="url(#glow)"/>
+
+  <!-- bottom-left kept empty for profile photo overlap -->
+  <rect x="0" y="192" width="220" height="120" fill="#09090b" opacity="0.001"/>
+
+  <g transform="translate(282, 108) scale(2.4)">
+    <path d="M18 4L8 18h6l-2 10 12-16h-6l2-8z" fill="url(#bolt)"/>
+  </g>
+
+  <text x="528" y="118" text-anchor="middle"
+    font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700" fill="#ffffff">BuzzDrop</text>
+  <text x="528" y="158" text-anchor="middle"
+    font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="400" fill="#a1a1aa">Viral products · Free UK delivery</text>
+
+  <text x="528" y="194" text-anchor="middle"
+    font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="400" fill="#71717a">www.buzzdrop.co.uk</text>
+</svg>

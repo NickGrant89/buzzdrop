@@ -27,7 +27,7 @@ export async function GET(
 
   const items = db
     .prepare(
-      `SELECT oi.quantity, oi.unit_price, p.title, p.image_url, p.slug FROM order_items oi
+      `SELECT oi.product_id, oi.quantity, oi.unit_price, p.title, p.image_url, p.slug FROM order_items oi
        JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?`
     )
     .all(id);

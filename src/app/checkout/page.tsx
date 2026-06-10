@@ -14,6 +14,7 @@ import {
 import { StoreLayout } from "@/components/StoreLayout";
 import { Loader2 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
+import { trackInitiateCheckout } from "@/lib/meta-pixel";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ""
@@ -31,6 +32,8 @@ type CheckoutPayload = {
   county?: string;
   postcode: string;
   total: number;
+  productIds?: string[];
+  numItems?: number;
 };
 
 function PaymentForm({ checkout }: { checkout: CheckoutPayload }) {
@@ -152,6 +155,16 @@ export default function CheckoutPage() {
       router.replace("/cart");
     }
   }, [router]);
+
+  useEffect(() => {
+    if (!checkout) return;
+    trackInitiateCheckout({
+      orderId: checkout.orderId,
+      total: checkout.total,
+      productIds: checkout.productIds ?? [],
+      numItems: checkout.numItems ?? 1,
+    });
+  }, [checkout]);
 
   return (
     <StoreLayout>

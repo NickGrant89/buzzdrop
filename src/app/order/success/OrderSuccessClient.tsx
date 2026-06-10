@@ -8,6 +8,7 @@ import { OrderStatusCard } from "@/components/OrderStatusCard";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import type { PublicOrder, PublicOrderItem } from "@/lib/order-display";
+import { trackPurchase } from "@/lib/meta-pixel";
 
 export default function OrderSuccessPage() {
   const searchParams = useSearchParams();
@@ -42,6 +43,23 @@ export default function OrderSuccessPage() {
           setItems(data.items);
           clearCart();
           sessionStorage.removeItem("stripe_checkout");
+
+          const productIds = (data.items as Array<{ product_id: string }>).map(
+            (i) => i.product_id
+          );
+          const numItems = (data.items as PublicOrderItem[]).reduce(
+            (n, i) => n + i.quantity,
+            0
+          );
+
+          if (!isDemo && (paymentIntentId || data.order.status !== "pending")) {
+            trackPurchase({
+              orderId: data.order.id,
+              total: data.order.total,
+              productIds,
+              numItems,
+            });
+          }
         }
       }
       setLoading(false);

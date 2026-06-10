@@ -82,6 +82,8 @@ export default function CartPage() {
             county: data.county,
             postcode: data.postcode,
             total: data.total,
+            productIds: items.map((i) => i.productId),
+            numItems: items.reduce((n, i) => n + i.quantity, 0),
           })
         );
         router.push("/checkout");

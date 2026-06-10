@@ -5,6 +5,7 @@ import type { Product } from "@/lib/db";
 import { useCart } from "@/context/CartContext";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { Minus, Plus } from "lucide-react";
+import { trackViewContent } from "@/lib/meta-pixel";
 
 export function ProductDetailClient({ product }: { product: Product }) {
   const { addItem } = useCart();
@@ -16,7 +17,8 @@ export function ProductDetailClient({ product }: { product: Product }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ productId: product.id }),
     }).catch(() => {});
-  }, [product.id]);
+    trackViewContent(product);
+  }, [product]);
 
   return (
     <div className="space-y-4">

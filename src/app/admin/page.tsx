@@ -16,6 +16,8 @@ import {
   Sparkles,
   Megaphone,
   Trash2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
@@ -101,7 +103,11 @@ type AdminData = {
     score: number;
     reasons: string[];
     productUrl: string;
+    adUrlFacebook: string;
+    adUrlInstagram: string;
+    adUrlTikTok: string;
   }>;
+  metaPixel: { configured: boolean };
 };
 
 export default function AdminPage() {
@@ -110,6 +116,17 @@ export default function AdminPage() {
   const [runningJob, setRunningJob] = useState<string | null>(null);
   const [jobMessage, setJobMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
+  const [copiedAdUrl, setCopiedAdUrl] = useState<string | null>(null);
+
+  async function copyAdUrl(key: string, url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedAdUrl(key);
+      setTimeout(() => setCopiedAdUrl(null), 2000);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const fetchData = useCallback(async () => {
     const res = await fetch("/api/admin");
@@ -339,6 +356,14 @@ export default function AdminPage() {
                   ? `Card payments active — ${data.stripe.mode} mode`
                   : "Demo checkout only — add Stripe keys to .env.local"}
               </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Meta Pixel:{" "}
+                {data.metaPixel.configured ? (
+                  <span className="text-emerald-400">Active (Purchase + Checkout tracking)</span>
+                ) : (
+                  <span className="text-amber-400">Add NEXT_PUBLIC_META_PIXEL_ID in Railway</span>
+                )}
+              </p>
             </div>
             <div>
               {data.stripe.configured ? (
@@ -554,11 +579,34 @@ export default function AdminPage() {
                     {hero.marginPercent}%)
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">{hero.reasons.join(" · ")}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["fb", "Meta ad", hero.adUrlFacebook],
+                        ["ig", "Instagram", hero.adUrlInstagram],
+                        ["tt", "TikTok", hero.adUrlTikTok],
+                      ] as const
+                    ).map(([key, label, url]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => copyAdUrl(`${hero.id}-${key}`, url)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-violet-500/40 hover:text-white"
+                      >
+                        {copiedAdUrl === `${hero.id}-${key}` ? (
+                          <Check className="h-3 w-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        {copiedAdUrl === `${hero.id}-${key}` ? "Copied" : label}
+                      </button>
+                    ))}
+                  </div>
                   <a
                     href={hero.productUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-3 inline-block text-sm text-violet-400 hover:text-violet-300"
+                    className="mt-2 inline-block text-sm text-violet-400 hover:text-violet-300"
                   >
                     View product →
                   </a>

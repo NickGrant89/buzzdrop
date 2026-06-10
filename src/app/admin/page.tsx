@@ -79,6 +79,7 @@ type AdminData = {
     pruneAfterDays: number;
     googleTrendsEnabled: boolean;
     tiktokTrendsEnabled: boolean;
+    deployCommit: string;
     trendKeywords: {
       count: number;
       google: number;
@@ -584,7 +585,9 @@ export default function AdminPage() {
               </p>
             )}
             <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-400">
-              <p className="font-medium text-zinc-300">Trend discovery</p>
+              <p className="font-medium text-zinc-300">
+                Trend discovery · deploy {data.automation.deployCommit}
+              </p>
               <p className="mt-1">
                 Sync limit: {data.automation.syncLimit} products · Prune after{" "}
                 {data.automation.pruneAfterDays} days

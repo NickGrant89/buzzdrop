@@ -143,6 +143,10 @@ export async function GET() {
       pruneAfterDays: trendDiscoveryConfig.pruneAfterDays,
       googleTrendsEnabled: trendDiscoveryConfig.googleTrendsEnabled,
       tiktokTrendsEnabled: trendDiscoveryConfig.tiktokTrendsEnabled,
+      deployCommit:
+        process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ??
+        process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ??
+        "local",
       trendKeywords,
     },
   });

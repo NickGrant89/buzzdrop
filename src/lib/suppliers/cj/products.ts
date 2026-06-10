@@ -170,7 +170,10 @@ function parseListV2(data: unknown): { pid: string; seed?: ListV2Product }[] {
 
 async function fetchWithStrategies(limit: number, keywords?: string[]): Promise<{ pid: string; seed?: ListProduct | ListV2Product }[]> {
   const searchKeywords = getSearchKeywords(keywords);
-  const pageSize = String(Math.min(limit, 50));
+  /** CJ list APIs typically cap at ~20 items per page regardless of requested size. */
+  const pageSize = "20";
+  const maxPagesPerKeyword = 3;
+
   const strategies: ListStrategy[] = [
     {
       name: "all-v1",
@@ -195,17 +198,6 @@ async function fetchWithStrategies(limit: number, keywords?: string[]): Promise<
       parse: parseListV1,
     },
     {
-      name: "keyword-v2",
-      path: `/product/listV2?${new URLSearchParams({
-        page: "1",
-        size: pageSize,
-        keyWord: searchKeywords[0] ?? "phone",
-        orderBy: "1",
-        sort: "desc",
-      })}`,
-      parse: parseListV2,
-    },
-    {
       name: "trending-v2",
       path: `/product/listV2?${new URLSearchParams({
         page: "1",
@@ -218,17 +210,33 @@ async function fetchWithStrategies(limit: number, keywords?: string[]): Promise<
     },
   ];
 
-  for (const keyword of searchKeywords.slice(1)) {
+  for (const keyword of searchKeywords) {
+    for (let page = 1; page <= maxPagesPerKeyword; page++) {
+      strategies.push({
+        name: `keyword-${keyword}-p${page}`,
+        path: `/product/listV2?${new URLSearchParams({
+          page: String(page),
+          size: pageSize,
+          keyWord: keyword,
+          orderBy: "1",
+          sort: "desc",
+        })}`,
+        parse: parseListV2,
+      });
+    }
+  }
+
+  for (let page = 2; page <= maxPagesPerKeyword; page++) {
     strategies.push({
-      name: `keyword-${keyword}`,
-      path: `/product/listV2?${new URLSearchParams({
-        page: "1",
-        size: pageSize,
-        keyWord: keyword,
-        orderBy: "1",
+      name: `trending-v1-p${page}`,
+      path: `/product/list?${new URLSearchParams({
+        pageNum: String(page),
+        pageSize,
+        searchType: "2",
+        orderBy: "listedNum",
         sort: "desc",
       })}`,
-      parse: parseListV2,
+      parse: parseListV1,
     });
   }
 

@@ -21,14 +21,25 @@ export function landedSupplierCost(productCost: number, shippingCost: number): n
   return Math.round((productCost + shippingCost) * 100) / 100;
 }
 
+/** Round up to the nearest .99 shelf price (e.g. 22.78 → 22.99). Values already at .99 stay put. */
+export function roundToCharmPrice(price: number): number {
+  if (!Number.isFinite(price) || price <= 0) return 0;
+  return Math.ceil(price + 0.01) - 0.01;
+}
+
+function minRetailForMargin(landedCost: number): number {
+  if (landedCost <= 0) return roundToCharmPrice(0.01);
+  return roundToCharmPrice(landedCost / (1 - MIN_MARGIN_PERCENT / 100));
+}
+
 export function calculateRetailPrice(supplierCost: number, trendScore: number): number {
   const trendMultiplier = 1 + Math.min(trendScore, 100) / 200;
   const raw = supplierCost * DEFAULT_MARKUP * trendMultiplier;
-  const rounded = Math.ceil(raw) - 0.01;
+  const rounded = roundToCharmPrice(raw);
   const margin = ((rounded - supplierCost) / rounded) * 100;
 
   if (margin < MIN_MARGIN_PERCENT) {
-    return Math.ceil(supplierCost / (1 - MIN_MARGIN_PERCENT / 100)) - 0.01;
+    return minRetailForMargin(supplierCost);
   }
 
   return rounded;
@@ -55,11 +66,11 @@ export function calculateRetailPriceWithShipping(
   }
 
   const productRetail = calculateRetailPrice(productCost, trendScore);
-  const withShipping = Math.round((productRetail + shipping) * 100) / 100;
+  const withShipping = productRetail + shipping;
   const landed = landedSupplierCost(productCost, shipping);
-  const minRetail = Math.ceil(landed / (1 - MIN_MARGIN_PERCENT / 100)) - 0.01;
+  const minRetail = minRetailForMargin(landed);
 
-  return Math.max(withShipping, minRetail);
+  return roundToCharmPrice(Math.max(withShipping, minRetail));
 }
 
 export function calculateProfit(retailPrice: number, supplierCost: number, quantity = 1): number {

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
 import { logAutomation } from "./logger";
 import { syncHeroProductPins } from "@/lib/hero-products";
+import { HiddenReason } from "@/lib/hidden-products";
 
 const ORDERED_PRODUCT_SUBQUERY = `
   SELECT DISTINCT oi.product_id FROM order_items oi
@@ -19,7 +20,7 @@ export function pruneLowPerformingProducts(): { pruned: number } {
 
   const result = db
     .prepare(
-      `UPDATE products SET is_active = 0, updated_at = ?
+      `UPDATE products SET is_active = 0, hidden_reason = ?, updated_at = ?
        WHERE is_active = 1
          AND is_pinned = 0
          AND supplier_pid != ''
@@ -27,7 +28,7 @@ export function pruneLowPerformingProducts(): { pruned: number } {
          AND COALESCE(view_count, 0) = 0
          AND id NOT IN (${ORDERED_PRODUCT_SUBQUERY})`
     )
-    .run(now, cutoff);
+    .run(HiddenReason.LowPerformer, now, cutoff);
 
   return { pruned: result.changes };
 }
@@ -60,10 +61,9 @@ export function trimExcessCatalogProducts(): { trimmed: number } {
 
     if (!victim) break;
 
-    db.prepare("UPDATE products SET is_active = 0, updated_at = ? WHERE id = ?").run(
-      now,
-      victim.id
-    );
+    db.prepare(
+      "UPDATE products SET is_active = 0, hidden_reason = ?, updated_at = ? WHERE id = ?"
+    ).run(HiddenReason.CatalogCap, now, victim.id);
     trimmed++;
   }
 

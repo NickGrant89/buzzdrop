@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, getSetting, setSetting } from "@/lib/db";
 import { getStoreStats } from "@/lib/products";
+import { getHiddenProducts, getHiddenProductCount, restoreProduct } from "@/lib/hidden-products";
 import { getHeroProducts, syncHeroProductPins } from "@/lib/hero-products";
 import { buildAdUrl } from "@/lib/meta-pixel";
 import { getRecentLogs } from "@/lib/automation/logger";
@@ -112,9 +113,10 @@ export async function GET() {
 
   syncHeroProductPins();
   const heroProducts = getHeroProducts(3);
+  const hiddenProducts = getHiddenProducts(50);
 
   return NextResponse.json({
-    stats,
+    stats: { ...stats, hiddenProductCount: getHiddenProductCount() },
     logs,
     automationEnabled,
     socialPostingEnabled,
@@ -146,6 +148,7 @@ export async function GET() {
         adUrlTikTok: buildAdUrl(base, "tiktok", campaign),
       };
     }),
+    hiddenProducts,
     metaPixel: {
       configured: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()),
     },
@@ -218,6 +221,15 @@ export async function POST(request: Request) {
   if (body.action === "test_social_webhook") {
     const result = await testSocialWebhook();
     return NextResponse.json(result);
+  }
+
+  if (body.action === "restore_product") {
+    const productId = typeof body.productId === "string" ? body.productId.trim() : "";
+    if (!productId) {
+      return NextResponse.json({ success: false, message: "Missing productId" }, { status: 400 });
+    }
+    const result = restoreProduct(productId);
+    return NextResponse.json({ success: result.ok, message: result.message });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

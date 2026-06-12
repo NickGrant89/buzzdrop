@@ -18,12 +18,20 @@ import {
   Trash2,
   Copy,
   Check,
+  EyeOff,
+  RotateCcw,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
 
 type AdminData = {
-  stats: { productCount: number; orderCount: number; revenue: number; profit: number };
+  stats: {
+    productCount: number;
+    hiddenProductCount: number;
+    orderCount: number;
+    revenue: number;
+    profit: number;
+  };
   logs: Array<{ id: string; job_type: string; status: string; message: string; created_at: string }>;
   automationEnabled: boolean;
   schedulerStarted: string;
@@ -110,6 +118,16 @@ type AdminData = {
     adUrlTikTok: string;
   }>;
   metaPixel: { configured: boolean };
+  hiddenProducts: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    retailPrice: number;
+    trendScore: number;
+    views: number;
+    reason: string;
+    hiddenAt: string;
+  }>;
 };
 
 export default function AdminPage() {
@@ -119,6 +137,7 @@ export default function AdminPage() {
   const [jobMessage, setJobMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [copiedAdUrl, setCopiedAdUrl] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   async function copyAdUrl(key: string, url: string) {
     try {
@@ -222,6 +241,23 @@ export default function AdminPage() {
     await fetchData();
   }
 
+  async function restoreHiddenProduct(productId: string) {
+    setRestoringId(productId);
+    setJobMessage(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "restore_product", productId }),
+    });
+    const result = await res.json().catch(() => ({}));
+    setJobMessage({
+      ok: result.success === true,
+      text: result.message ?? (result.success ? "Product restored" : "Restore failed"),
+    });
+    await fetchData();
+    setRestoringId(null);
+  }
+
   async function handleLogout() {
     await fetch("/api/auth/admin", { method: "DELETE" });
     window.location.href = "/admin/login";
@@ -240,7 +276,16 @@ export default function AdminPage() {
   if (!data) return null;
 
   const statCards = [
-    { label: "Products", value: data.stats.productCount, icon: Package, color: "text-violet-400" },
+    {
+      label: "Active products",
+      value: data.stats.productCount,
+      sub:
+        data.stats.hiddenProductCount > 0
+          ? `${data.stats.hiddenProductCount} hidden`
+          : undefined,
+      icon: Package,
+      color: "text-violet-400",
+    },
     { label: "Orders", value: data.stats.orderCount, icon: Truck, color: "text-blue-400" },
     { label: "Revenue", value: formatPrice(data.stats.revenue), icon: DollarSign, color: "text-emerald-400" },
     { label: "Profit", value: formatPrice(data.stats.profit), icon: Zap, color: "text-fuchsia-400" },
@@ -623,7 +668,7 @@ export default function AdminPage() {
 
         {/* Stats */}
         <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {statCards.map(({ label, value, icon: Icon, color }) => (
+          {statCards.map(({ label, value, sub, icon: Icon, color }) => (
             <div
               key={label}
               className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5"
@@ -631,9 +676,87 @@ export default function AdminPage() {
               <Icon className={`mb-2 h-5 w-5 ${color}`} />
               <p className="text-2xl font-bold text-white">{value}</p>
               <p className="text-sm text-zinc-500">{label}</p>
+              {sub && <p className="mt-1 text-xs text-zinc-600">{sub}</p>}
             </div>
           ))}
         </div>
+
+        {/* Hidden products */}
+        {data.hiddenProducts.length > 0 && (
+          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                  <EyeOff className="h-5 w-5 text-zinc-500" />
+                  Hidden products
+                </h2>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Off the shop but still in your catalog — restore to show again (may be re-hidden on
+                  next sync if over the {data.automation.catalogMaxActive} cap)
+                </p>
+              </div>
+              <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-sm text-zinc-400">
+                {data.stats.hiddenProductCount} hidden
+              </span>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-500">
+                    <th className="py-2 pr-4 font-medium">Product</th>
+                    <th className="py-2 pr-4 font-medium">Slug</th>
+                    <th className="py-2 pr-4 font-medium">Why hidden</th>
+                    <th className="py-2 pr-4 font-medium">Hidden</th>
+                    <th className="py-2 font-medium" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.hiddenProducts.map((product) => (
+                    <tr key={product.id} className="border-b border-zinc-800/80">
+                      <td className="py-3 pr-4">
+                        <p className="line-clamp-2 font-medium text-white">{product.title}</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {formatPrice(product.retailPrice)} · trend {product.trendScore.toFixed(0)} ·{" "}
+                          {product.views} views
+                        </p>
+                      </td>
+                      <td className="py-3 pr-4 font-mono text-xs text-zinc-400">{product.slug}</td>
+                      <td className="py-3 pr-4 text-zinc-400">{product.reason}</td>
+                      <td className="py-3 pr-4 whitespace-nowrap text-zinc-500">
+                        {new Date(product.hiddenAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => restoreHiddenProduct(product.id)}
+                          disabled={restoringId !== null}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs text-zinc-300 hover:border-emerald-500/40 hover:text-white disabled:opacity-50"
+                        >
+                          {restoringId === product.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          )}
+                          Restore
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.stats.hiddenProductCount > data.hiddenProducts.length && (
+              <p className="mt-3 text-xs text-zinc-600">
+                Showing latest {data.hiddenProducts.length} of {data.stats.hiddenProductCount}{" "}
+                hidden products
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Manual job triggers */}
         <div className="mb-8">

@@ -8,6 +8,7 @@ import { fetchCjTrendingProductsWithMeta } from "../suppliers/cj/products";
 import { estimateCjShipping } from "../suppliers/cj/shipping";
 import { getTrendKeywords, applyTrendKeywordBoost } from "./trend-keywords";
 import { pruneLowPerformingProducts, trimExcessCatalogProducts, trimExcessCatalogProductsWithLog } from "./catalog-prune";
+import { HiddenReason } from "../hidden-products";
 import {
   buildProductSlug,
   normalizeProductDescription,
@@ -143,9 +144,9 @@ export function tidyProductCatalog(): {
 
   const deactivated = db
     .prepare(
-      `UPDATE products SET is_active = 0, updated_at = ? WHERE supplier_pid = '' OR supplier_pid IS NULL`
+      `UPDATE products SET is_active = 0, hidden_reason = ?, updated_at = ? WHERE supplier_pid = '' OR supplier_pid IS NULL`
     )
-    .run(now).changes;
+    .run(HiddenReason.Demo, now).changes;
 
   const rows = db
     .prepare(

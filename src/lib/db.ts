@@ -22,6 +22,7 @@ export type Product = {
   stock: number;
   view_count: number;
   is_pinned: number;
+  hidden_reason: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -226,6 +227,9 @@ function migrateSchema(database: Database.Database) {
   }
   if (!productCols.includes("is_pinned")) {
     database.exec("ALTER TABLE products ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!productCols.includes("hidden_reason")) {
+    database.exec("ALTER TABLE products ADD COLUMN hidden_reason TEXT");
   }
 
   database.exec(`

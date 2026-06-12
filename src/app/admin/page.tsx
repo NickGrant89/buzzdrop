@@ -79,6 +79,7 @@ type AdminData = {
     catalogPrune: string;
     syncLimit: number;
     pruneAfterDays: number;
+    catalogMaxActive: number;
     googleTrendsEnabled: boolean;
     tiktokTrendsEnabled: boolean;
     deployCommit: string;
@@ -101,6 +102,7 @@ type AdminData = {
     trendScore: number;
     views: number;
     score: number;
+    pinned: boolean;
     reasons: string[];
     productUrl: string;
     adUrlFacebook: string;
@@ -562,7 +564,7 @@ export default function AdminPage() {
           <div className="mb-8 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
             <h2 className="text-lg font-semibold text-white">Hero Products</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Auto-picked for Meta ads & TikTok — best margin, trend score, and £15–£45 price band
+              Auto-picked for Meta ads & TikTok — pinned heroes are never auto-hidden from the shop
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               {data.heroProducts.map((hero, i) => (
@@ -572,6 +574,9 @@ export default function AdminPage() {
                 >
                   <p className="text-xs font-medium uppercase tracking-wide text-amber-400">
                     Hero #{i + 1} · score {hero.score}
+                    {hero.pinned && (
+                      <span className="ml-2 normal-case text-emerald-400">· Pinned</span>
+                    )}
                   </p>
                   <p className="mt-2 line-clamp-2 font-medium text-white">{hero.title}</p>
                   <p className="mt-1 text-sm text-zinc-400">
@@ -687,8 +692,9 @@ export default function AdminPage() {
                 Trend discovery · deploy {data.automation.deployCommit}
               </p>
               <p className="mt-1">
-                Sync limit: {data.automation.syncLimit} products · Prune after{" "}
-                {data.automation.pruneAfterDays} days
+                Sync limit: {data.automation.syncLimit} products · Max active:{" "}
+                {data.automation.catalogMaxActive} · Prune after {data.automation.pruneAfterDays}{" "}
+                days
               </p>
               <p className="mt-1">
                 Keywords: {data.automation.trendKeywords.count || "—"} merged

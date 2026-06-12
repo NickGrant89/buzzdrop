@@ -24,6 +24,12 @@ export const trendDiscoveryConfig = {
   /** Hide products with 0 views & 0 orders after this many days. */
   pruneAfterDays: Math.max(7, parseInt(process.env.CATALOG_PRUNE_DAYS ?? "30", 10) || 30),
 
+  /** Max active products on the storefront — excess low performers are hidden after sync. */
+  catalogMaxActive: Math.min(
+    200,
+    Math.max(20, parseInt(process.env.CATALOG_MAX_ACTIVE ?? "60", 10) || 60)
+  ),
+
   /** Google Trends daily searches (UK by default). */
   googleTrendsEnabled: process.env.GOOGLE_TRENDS_ENABLED !== "false",
   googleTrendsGeo: (process.env.GOOGLE_TRENDS_GEO ?? "GB").toUpperCase(),

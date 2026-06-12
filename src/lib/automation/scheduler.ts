@@ -88,7 +88,7 @@ export function startAutomationScheduler() {
   setSetting("scheduler_started_at", new Date().toISOString());
   console.log("[BuzzDrop] Automation scheduler started");
   console.log(`  - Product sync: ${syncCron}`);
-  console.log("  - Catalog prune: 05:00 daily (0 views/orders after 30 days)");
+  console.log(`  - Catalog prune: 05:00 daily (0 views/orders after 30 days, cap ${trendDiscoveryConfig.catalogMaxActive} active)`);
   console.log("  - Price/stock update: every 2 hours");
   console.log("  - Order fulfillment: every 5 minutes");
   console.log(`  - Social marketing: 10:00 & 18:00 daily (${tz})`);
@@ -113,14 +113,14 @@ export async function runJobManually(
         const result = tidyProductCatalog();
         return {
           success: true,
-          message: `Tidied catalog: ${result.deactivated} demo hidden, ${result.updated} cleaned, ${result.pruned} low performers hidden`,
+          message: `Tidied catalog: ${result.deactivated} demo hidden, ${result.updated} cleaned, ${result.pruned} low performers hidden, ${result.trimmed} trimmed to cap`,
         };
       }
       case "prune": {
         const result = await pruneLowPerformingProductsWithLog();
         return {
           success: true,
-          message: `Pruned catalog: ${result.pruned} inactive products hidden`,
+          message: `Pruned catalog: ${result.pruned} inactive products hidden, ${result.trimmed} trimmed to cap`,
         };
       }
       case "social": {

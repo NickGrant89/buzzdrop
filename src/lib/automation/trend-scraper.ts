@@ -7,7 +7,7 @@ import { trendDiscoveryConfig } from "../config/trend-discovery";
 import { fetchCjTrendingProductsWithMeta } from "../suppliers/cj/products";
 import { estimateCjShipping } from "../suppliers/cj/shipping";
 import { getTrendKeywords, applyTrendKeywordBoost } from "./trend-keywords";
-import { pruneLowPerformingProducts } from "./catalog-prune";
+import { pruneLowPerformingProducts, trimExcessCatalogProducts, trimExcessCatalogProductsWithLog } from "./catalog-prune";
 import {
   buildProductSlug,
   normalizeProductDescription,
@@ -137,6 +137,7 @@ export function tidyProductCatalog(): {
   deactivated: number;
   updated: number;
   pruned: number;
+  trimmed: number;
 } {
   const now = new Date().toISOString();
 
@@ -179,8 +180,9 @@ export function tidyProductCatalog(): {
   transaction();
 
   const { pruned } = pruneLowPerformingProducts();
+  const { trimmed } = trimExcessCatalogProducts();
 
-  return { deactivated, updated, pruned };
+  return { deactivated, updated, pruned, trimmed };
 }
 
 export async function syncTrendingProducts(): Promise<{
@@ -229,12 +231,15 @@ export async function syncTrendingProducts(): Promise<{
       keywordSnapshot.keywords
     );
 
+    const { trimmed } = await trimExcessCatalogProductsWithLog();
+    const trimNote = trimmed > 0 ? ` · ${trimmed} trimmed to cap` : "";
+
     const googleCount = keywordSnapshot.sources.google.length;
     const tiktokCount = keywordSnapshot.sources.tiktok.length;
     await logAutomation(
       "product_sync",
       "success",
-      `CJ UK: synced ${cjProducts.length} products (${result.added} new, ${result.updated} updated) · ${keywordSnapshot.keywords.length} keywords (Google ${googleCount}, TikTok ${tiktokCount})`
+      `CJ UK: synced ${cjProducts.length} products (${result.added} new, ${result.updated} updated)${trimNote} · ${keywordSnapshot.keywords.length} keywords (Google ${googleCount}, TikTok ${tiktokCount})`
     );
     return { ...result, source: "cj", keywordsUsed: keywordSnapshot.keywords.length };
   } catch (err) {

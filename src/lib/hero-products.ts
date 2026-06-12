@@ -110,3 +110,22 @@ export function getHeroProducts(limit = 3): HeroProduct[] {
 
   return picked.slice(0, limit);
 }
+
+/** Pin current hero products so catalog prune/trim never hides them. */
+export function syncHeroProductPins(limit = 3): { pinned: number; ids: string[] } {
+  const heroes = getHeroProducts(limit);
+  const ids = heroes.map((h) => h.product.id);
+  const now = new Date().toISOString();
+
+  const transaction = db.transaction(() => {
+    db.prepare("UPDATE products SET is_pinned = 0, updated_at = ? WHERE is_pinned = 1").run(now);
+    if (ids.length === 0) return;
+    const pin = db.prepare("UPDATE products SET is_pinned = 1, updated_at = ? WHERE id = ?");
+    for (const id of ids) {
+      pin.run(now, id);
+    }
+  });
+  transaction();
+
+  return { pinned: ids.length, ids };
+}

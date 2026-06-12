@@ -21,6 +21,7 @@ export type Product = {
   tiktok_product_id: string;
   stock: number;
   view_count: number;
+  is_pinned: number;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -222,6 +223,9 @@ function migrateSchema(database: Database.Database) {
   }
   if (!productCols.includes("view_count")) {
     database.exec("ALTER TABLE products ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!productCols.includes("is_pinned")) {
+    database.exec("ALTER TABLE products ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0");
   }
 
   database.exec(`

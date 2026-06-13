@@ -4,6 +4,7 @@ import { getStoreStats } from "@/lib/products";
 import { getHiddenProducts, getHiddenProductCount, restoreProduct } from "@/lib/hidden-products";
 import { getHeroProducts, syncHeroProductPins } from "@/lib/hero-products";
 import { buildAdUrl } from "@/lib/meta-pixel";
+import { buildTikTokManualPost } from "@/lib/marketing/tiktok-manual-post";
 import { getRecentLogs } from "@/lib/automation/logger";
 import { runJobManually } from "@/lib/automation/scheduler";
 import { isCjConfigured } from "@/lib/config";
@@ -146,6 +147,7 @@ export async function GET() {
         adUrlFacebook: buildAdUrl(base, "facebook", campaign),
         adUrlInstagram: buildAdUrl(base, "instagram", campaign),
         adUrlTikTok: buildAdUrl(base, "tiktok", campaign),
+        tiktokPost: buildTikTokManualPost(h.product, base),
       };
     }),
     hiddenProducts,

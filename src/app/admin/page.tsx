@@ -116,6 +116,18 @@ type AdminData = {
     adUrlFacebook: string;
     adUrlInstagram: string;
     adUrlTikTok: string;
+    tiktokPost: {
+      hook: string;
+      caption: string;
+      hashtags: string[];
+      hashtagsLine: string;
+      onScreenText: string[];
+      videoScript: string;
+      soundSuggestion: string;
+      pinnedComment: string;
+      seoKeywords: string[];
+      checklist: string[];
+    };
   }>;
   metaPixel: { configured: boolean };
   hiddenProducts: Array<{
@@ -142,6 +154,16 @@ export default function AdminPage() {
   async function copyAdUrl(key: string, url: string) {
     try {
       await navigator.clipboard.writeText(url);
+      setCopiedAdUrl(key);
+      setTimeout(() => setCopiedAdUrl(null), 2000);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function copyTikTokField(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
       setCopiedAdUrl(key);
       setTimeout(() => setCopiedAdUrl(null), 2000);
     } catch {
@@ -660,6 +682,81 @@ export default function AdminPage() {
                   >
                     View product →
                   </a>
+
+                  <div className="mt-4 rounded-lg border border-zinc-700/80 bg-zinc-950/80 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-pink-400">
+                      TikTok — paste manually
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-zinc-300">
+                      <span className="font-medium text-white">Hook:</span> {hero.tiktokPost.hook}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          ["caption", "Caption", hero.tiktokPost.caption],
+                          ["hashtags", "Hashtags", hero.tiktokPost.hashtagsLine],
+                          ["script", "Video script", hero.tiktokPost.videoScript],
+                          ["pin", "Pin comment", hero.tiktokPost.pinnedComment],
+                          [
+                            "all",
+                            "Copy all",
+                            [
+                              "=== TIKTOK CAPTION ===",
+                              hero.tiktokPost.caption,
+                              "",
+                              "=== VIDEO SCRIPT ===",
+                              hero.tiktokPost.videoScript,
+                              "",
+                              "=== PIN THIS COMMENT ===",
+                              hero.tiktokPost.pinnedComment,
+                              "",
+                              "=== ON-SCREEN TEXT ===",
+                              hero.tiktokPost.onScreenText.join(" · "),
+                              "",
+                              `Sound: ${hero.tiktokPost.soundSuggestion}`,
+                            ].join("\n"),
+                          ],
+                        ] as const
+                      ).map(([key, label, text]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => copyTikTokField(`${hero.id}-tt-${key}`, text)}
+                          className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 hover:border-pink-500/40 hover:text-white"
+                        >
+                          {copiedAdUrl === `${hero.id}-tt-${key}` ? (
+                            <Check className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                          {copiedAdUrl === `${hero.id}-tt-${key}` ? "Copied" : label}
+                        </button>
+                      ))}
+                    </div>
+                    <details className="mt-2 group">
+                      <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">
+                        On-screen text · sound · checklist
+                      </summary>
+                      <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-zinc-400">
+                        <p>
+                          <span className="text-zinc-500">On-screen:</span>{" "}
+                          {hero.tiktokPost.onScreenText.join(" · ")}
+                        </p>
+                        <p>
+                          <span className="text-zinc-500">Sound:</span> {hero.tiktokPost.soundSuggestion}
+                        </p>
+                        <p>
+                          <span className="text-zinc-500">SEO:</span>{" "}
+                          {hero.tiktokPost.seoKeywords.join(", ")}
+                        </p>
+                        <ul className="list-inside list-disc space-y-0.5">
+                          {hero.tiktokPost.checklist.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </details>
+                  </div>
                 </div>
               ))}
             </div>

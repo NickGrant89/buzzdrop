@@ -20,6 +20,7 @@ import {
   Check,
   EyeOff,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
@@ -367,6 +368,25 @@ export default function AdminPage() {
           </div>
         )}
 
+        {data.heroProducts.length > 0 && (
+          <nav className="mb-6 flex flex-wrap gap-2 text-sm">
+            <a
+              href="#hero-tiktok-posts"
+              className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-3 py-1.5 text-pink-200 hover:border-pink-400/50"
+            >
+              TikTok posts (copy & paste) ↑
+            </a>
+            {data.hiddenProducts.length > 0 && (
+              <a
+                href="#hidden-products"
+                className="rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-zinc-400 hover:text-white"
+              >
+                Hidden products ({data.stats.hiddenProductCount})
+              </a>
+            )}
+          </nav>
+        )}
+
         {/* CJ Dropshipping connection */}
         <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -628,10 +648,15 @@ export default function AdminPage() {
 
         {/* Hero products — auto-picked for ads & TikTok */}
         {data.heroProducts.length > 0 && (
-          <div className="mb-8 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
-            <h2 className="text-lg font-semibold text-white">Hero Products</h2>
+          <div
+            id="hero-tiktok-posts"
+            className="mb-8 scroll-mt-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6"
+          >
+            <h2 className="text-lg font-semibold text-white">Hero Products & TikTok posts</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Auto-picked for Meta ads & TikTok — pinned heroes are never auto-hidden from the shop
+              Auto-picked for Meta ads — each card has a{" "}
+              <span className="text-pink-300">TikTok — paste manually</span> box (caption, hashtags,
+              video script, pin comment). Pinned heroes are never auto-hidden from the shop.
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               {data.heroProducts.map((hero, i) => (
@@ -780,22 +805,31 @@ export default function AdminPage() {
 
         {/* Hidden products */}
         {data.hiddenProducts.length > 0 && (
-          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
-                  <EyeOff className="h-5 w-5 text-zinc-500" />
-                  Hidden products
-                </h2>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Off the shop but still in your catalog — restore to show again (may be re-hidden on
-                  next sync if over the {data.automation.catalogMaxActive} cap)
-                </p>
+          <details
+            id="hidden-products"
+            className="group mb-8 scroll-mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6"
+          >
+            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-1 items-start gap-2">
+                  <ChevronDown className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500 transition group-open:rotate-180" />
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                      <EyeOff className="h-5 w-5 text-zinc-500" />
+                      Hidden products
+                    </h2>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      Off the shop but still in your catalog — restore to show again (may be
+                      re-hidden on next sync if over the {data.automation.catalogMaxActive} cap).
+                      Click to expand.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-sm text-zinc-400">
+                  {data.stats.hiddenProductCount} hidden
+                </span>
               </div>
-              <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-sm text-zinc-400">
-                {data.stats.hiddenProductCount} hidden
-              </span>
-            </div>
+            </summary>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
@@ -852,7 +886,7 @@ export default function AdminPage() {
                 hidden products
               </p>
             )}
-          </div>
+          </details>
         )}
 
         {/* Manual job triggers */}

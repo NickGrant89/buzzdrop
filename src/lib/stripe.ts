@@ -237,6 +237,18 @@ export async function createManualPaymentCheckout(
   }
 
   const description = order.manual_description || "BuzzDrop order";
+  const item = db
+    .prepare(
+      `SELECT oi.quantity, p.title FROM order_items oi
+       JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? LIMIT 1`
+    )
+    .get(orderId) as { quantity: number; title: string } | undefined;
+
+  const lineName = item
+    ? `${item.quantity}x ${item.title}`.slice(0, 120)
+    : description.slice(0, 120);
+  const lineDescription = item && description !== item.title ? description : "BuzzDrop manual order";
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: order.customer_email,
@@ -247,8 +259,8 @@ export async function createManualPaymentCheckout(
           currency: storeConfig.currency.toLowerCase(),
           unit_amount: amount,
           product_data: {
-            name: description.slice(0, 120),
-            description: "BuzzDrop manual order",
+            name: lineName,
+            description: lineDescription.slice(0, 200),
           },
         },
       },

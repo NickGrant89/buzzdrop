@@ -17,6 +17,8 @@ import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
 import { automationScheduleLabels } from "@/lib/automation/schedule-labels";
 import { buildTikTokManualPosts } from "@/lib/marketing/tiktok-content";
 import { createManualPayment, listPendingManualPayments } from "@/lib/manual-payments";
+import { quoteManualOrderShipping } from "@/lib/manual-shipping";
+import { getActiveProducts } from "@/lib/products";
 import { getSiteUrl } from "@/lib/seo";
 
 export async function GET() {
@@ -157,6 +159,14 @@ export async function GET() {
       ...p,
       payUrl: `${getSiteUrl()}/pay/${p.id}`,
     })),
+    catalogProducts: getActiveProducts(60).map((p) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      retailPrice: p.retail_price,
+      supplierSku: p.supplier_sku,
+      imageUrl: p.image_url,
+    })),
     metaPixel: {
       configured: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()),
     },
@@ -240,16 +250,52 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: result.ok, message: result.message });
   }
 
+  if (body.action === "quote_manual_shipping") {
+    const productId = typeof body.productId === "string" ? body.productId.trim() : "";
+    const destCountryCode =
+      typeof body.destCountryCode === "string" ? body.destCountryCode.trim() : "GB";
+    const destPostcode = typeof body.destPostcode === "string" ? body.destPostcode.trim() : "";
+    const quantity = Number(body.quantity ?? 1);
+
+    if (!productId) {
+      return NextResponse.json({ success: false, message: "Select a product first" }, { status: 400 });
+    }
+
+    try {
+      const quote = await quoteManualOrderShipping({
+        productId,
+        quantity: Number.isFinite(quantity) ? quantity : 1,
+        destCountryCode,
+        destPostcode,
+      });
+      return NextResponse.json({ success: true, quote });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not quote shipping";
+      return NextResponse.json({ success: false, message }, { status: 400 });
+    }
+  }
+
   if (body.action === "create_manual_payment") {
     const customerName = typeof body.customerName === "string" ? body.customerName.trim() : "";
     const customerEmail = typeof body.customerEmail === "string" ? body.customerEmail.trim() : "";
     const description = typeof body.description === "string" ? body.description.trim() : "";
     const notes = typeof body.notes === "string" ? body.notes.trim() : "";
     const amountGbp = Number(body.amountGbp);
+    const productId = typeof body.productId === "string" ? body.productId.trim() : "";
+    const quantity = Number(body.quantity ?? 1);
+    const destCountryCode =
+      typeof body.destCountryCode === "string" ? body.destCountryCode.trim() : "";
+    const destPostcode = typeof body.destPostcode === "string" ? body.destPostcode.trim() : "";
 
-    if (!customerName || !customerEmail || !description) {
+    if (!customerName || !customerEmail) {
       return NextResponse.json(
-        { success: false, message: "Name, email and description are required" },
+        { success: false, message: "Name and email are required" },
+        { status: 400 }
+      );
+    }
+    if (!description && !productId) {
+      return NextResponse.json(
+        { success: false, message: "Pick a product or enter a description" },
         { status: 400 }
       );
     }
@@ -260,19 +306,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = createManualPayment({
-      customerName,
-      customerEmail,
-      description,
-      amountGbp,
-      notes: notes || undefined,
-    });
+    try {
+      const result = createManualPayment({
+        customerName,
+        customerEmail,
+        description,
+        amountGbp,
+        notes: notes || undefined,
+        productId: productId || undefined,
+        quantity: Number.isFinite(quantity) ? quantity : 1,
+        destCountryCode: destCountryCode || undefined,
+        destPostcode: destPostcode || undefined,
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: "Payment link created — send the link to your customer",
-      ...result,
-    });
+      return NextResponse.json({
+        success: true,
+        message: "Payment link created — send the link to your customer",
+        ...result,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not create payment link";
+      return NextResponse.json({ success: false, message }, { status: 400 });
+    }
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

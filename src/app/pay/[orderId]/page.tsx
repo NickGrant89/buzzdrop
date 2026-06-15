@@ -15,6 +15,12 @@ type PaymentDetails = {
   status: string;
   paid: boolean;
   stripeEnabled: boolean;
+  item: {
+    title: string;
+    quantity: number;
+    slug: string;
+    imageUrl: string;
+  } | null;
 };
 
 export default function ManualPayPage() {
@@ -98,6 +104,22 @@ export default function ManualPayPage() {
             <p className="mt-1 text-zinc-400">Hi {payment.customerName.split(" ")[0]},</p>
 
             <div className="mt-6 space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+              {payment.item && (
+                <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={payment.item.imageUrl}
+                    alt={payment.item.title}
+                    className="h-16 w-16 rounded-lg object-cover"
+                  />
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Item</p>
+                    <p className="mt-1 font-medium text-white">
+                      {payment.item.quantity}x {payment.item.title}
+                    </p>
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-xs uppercase tracking-wide text-zinc-500">Order</p>
                 <p className="mt-1 text-white">{payment.description}</p>

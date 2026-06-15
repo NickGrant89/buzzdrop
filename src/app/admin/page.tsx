@@ -157,6 +157,19 @@ type AdminData = {
     status: string;
     created_at: string;
     payUrl: string;
+    productTitle: string | null;
+    productSlug: string | null;
+    supplierSku: string | null;
+    supplierVid: string | null;
+    quantity: number | null;
+  }>;
+  catalogProducts: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    retailPrice: number;
+    supplierSku: string;
+    imageUrl: string;
   }>;
 };
 
@@ -174,7 +187,116 @@ export default function AdminPage() {
   const [manualDescription, setManualDescription] = useState("");
   const [manualAmount, setManualAmount] = useState("");
   const [manualNotes, setManualNotes] = useState("");
+  const [manualProductId, setManualProductId] = useState("");
+  const [manualQuantity, setManualQuantity] = useState("1");
+  const [manualCountry, setManualCountry] = useState("US");
+  const [manualPostcode, setManualPostcode] = useState("");
+  const [manualShippingDetails, setManualShippingDetails] = useState("");
+  const [shippingQuote, setShippingQuote] = useState<{
+    productSubtotalGbp: number;
+    destCountryCode: string;
+    destPostcode: string;
+    options: Array<{
+      id: string;
+      logisticName: string;
+      fromCountryCode: string;
+      shippingCostGbp: number;
+      deliveryEstimate: string;
+      totalGbp: number;
+    }>;
+  } | null>(null);
+  const [selectedShippingId, setSelectedShippingId] = useState("");
+  const [quotingShipping, setQuotingShipping] = useState(false);
   const [creatingManualPayment, setCreatingManualPayment] = useState(false);
+
+  const manualShipCountries = [
+    { code: "GB", label: "United Kingdom", postcodeLabel: "Postcode", placeholder: "SW1A 1AA" },
+    { code: "US", label: "United States", postcodeLabel: "ZIP code", placeholder: "75001" },
+    { code: "CA", label: "Canada", postcodeLabel: "Postal code", placeholder: "M5H 2N2" },
+    { code: "AU", label: "Australia", postcodeLabel: "Postcode", placeholder: "2000" },
+    { code: "IE", label: "Ireland", postcodeLabel: "Eircode", placeholder: "D02 X285" },
+    { code: "DE", label: "Germany", postcodeLabel: "Postcode", placeholder: "10115" },
+    { code: "FR", label: "France", postcodeLabel: "Postcode", placeholder: "75001" },
+  ] as const;
+
+  const activeShipCountry =
+    manualShipCountries.find((c) => c.code === manualCountry) ?? manualShipCountries[1];
+
+  function selectManualProduct(productId: string) {
+    setManualProductId(productId);
+    setShippingQuote(null);
+    setSelectedShippingId("");
+    setManualShippingDetails("");
+    if (!productId || !data) return;
+
+    const product = data.catalogProducts.find((p) => p.id === productId);
+    if (!product) return;
+
+    setManualDescription(`${product.title} + shipping`);
+    setManualAmount(product.retailPrice.toFixed(2));
+  }
+
+  async function quoteManualShipping() {
+    if (!manualProductId) {
+      setJobMessage({ ok: false, text: "Select a product first to quote shipping" });
+      return;
+    }
+
+    setQuotingShipping(true);
+    setJobMessage(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "quote_manual_shipping",
+        productId: manualProductId,
+        quantity: parseInt(manualQuantity, 10) || 1,
+        destCountryCode: manualCountry,
+        destPostcode: manualPostcode,
+      }),
+    });
+    const result = await res.json().catch(() => ({}));
+    setQuotingShipping(false);
+
+    if (!result.success || !result.quote) {
+      setShippingQuote(null);
+      setJobMessage({
+        ok: false,
+        text: result.message ?? "Could not fetch shipping quotes from CJ",
+      });
+      return;
+    }
+
+    setShippingQuote(result.quote);
+    setJobMessage({
+      ok: true,
+      text: `Found ${result.quote.options.length} shipping option(s) from CJ`,
+    });
+  }
+
+  function applyShippingOption(optionId: string) {
+    if (!shippingQuote) return;
+    const option = shippingQuote.options.find((o) => o.id === optionId);
+    if (!option) return;
+
+    const countryLabel =
+      manualShipCountries.find((c) => c.code === shippingQuote.destCountryCode)?.label
+      ?? shippingQuote.destCountryCode;
+
+    setSelectedShippingId(optionId);
+    setManualAmount(option.totalGbp.toFixed(2));
+    setManualShippingDetails(
+      [
+        `Ship to: ${countryLabel}${shippingQuote.destPostcode ? ` (${shippingQuote.destPostcode})` : ""}`,
+        `CJ method: ${option.logisticName}`,
+        `From warehouse: ${option.fromCountryCode}`,
+        `Delivery: ${option.deliveryEstimate}`,
+        `Product: ${formatPrice(shippingQuote.productSubtotalGbp)}`,
+        `Shipping: ${formatPrice(option.shippingCostGbp)}`,
+        `Total: ${formatPrice(option.totalGbp)}`,
+      ].join("\n")
+    );
+  }
 
   async function copyText(key: string, text: string) {
     try {
@@ -307,7 +429,11 @@ export default function AdminPage() {
         customerEmail: manualEmail,
         description: manualDescription,
         amountGbp: parseFloat(manualAmount),
-        notes: manualNotes,
+        notes: [manualShippingDetails, manualNotes].filter(Boolean).join("\n\n"),
+        productId: manualProductId || undefined,
+        quantity: parseInt(manualQuantity, 10) || 1,
+        destCountryCode: manualCountry,
+        destPostcode: manualPostcode,
       }),
     });
     const result = await res.json().catch(() => ({}));
@@ -325,6 +451,12 @@ export default function AdminPage() {
       setManualDescription("");
       setManualAmount("");
       setManualNotes("");
+      setManualProductId("");
+      setManualQuantity("1");
+      setManualPostcode("");
+      setManualShippingDetails("");
+      setShippingQuote(null);
+      setSelectedShippingId("");
     }
     await fetchData();
   }
@@ -1053,6 +1185,18 @@ export default function AdminPage() {
           </p>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <select
+              value={manualProductId}
+              onChange={(e) => selectManualProduct(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white sm:col-span-2"
+            >
+              <option value="">Select product (optional)</option>
+              {data.catalogProducts.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.title} — {formatPrice(product.retailPrice)}
+                </option>
+              ))}
+            </select>
             <input
               type="text"
               placeholder="Customer name"
@@ -1076,15 +1220,129 @@ export default function AdminPage() {
             />
             <input
               type="number"
-              min="0.3"
-              step="0.01"
-              placeholder="Amount (£)"
-              value={manualAmount}
-              onChange={(e) => setManualAmount(e.target.value)}
+              min="1"
+              max="10"
+              step="1"
+              placeholder="Qty"
+              value={manualQuantity}
+              onChange={(e) => {
+                setManualQuantity(e.target.value);
+                setShippingQuote(null);
+                setSelectedShippingId("");
+              }}
               className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
             />
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:col-span-2">
+              <p className="text-sm font-medium text-white">CJ shipping quotes</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Pick product + destination — we&apos;ll pull live rates from CJ. UK store orders
+                normally include free shipping; for international, use product + shipping total.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <select
+                  value={manualCountry}
+                  onChange={(e) => {
+                    setManualCountry(e.target.value);
+                    setShippingQuote(null);
+                    setSelectedShippingId("");
+                  }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
+                >
+                  {manualShipCountries.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  placeholder={activeShipCountry.placeholder}
+                  value={manualPostcode}
+                  onChange={(e) => setManualPostcode(e.target.value)}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
+                />
+                <button
+                  type="button"
+                  onClick={quoteManualShipping}
+                  disabled={quotingShipping || !manualProductId}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                >
+                  {quotingShipping ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Truck className="h-4 w-4" />
+                  )}
+                  Get shipping quotes
+                </button>
+              </div>
+
+              {shippingQuote && shippingQuote.options.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                        <th className="pb-2 pr-3">Method</th>
+                        <th className="pb-2 pr-3">From</th>
+                        <th className="pb-2 pr-3">Delivery</th>
+                        <th className="pb-2 pr-3">Shipping</th>
+                        <th className="pb-2 pr-3">Total</th>
+                        <th className="pb-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shippingQuote.options.map((option) => (
+                        <tr key={option.id} className="border-b border-zinc-800/50">
+                          <td className="py-2 pr-3 text-zinc-300">{option.logisticName}</td>
+                          <td className="py-2 pr-3 text-zinc-500">{option.fromCountryCode}</td>
+                          <td className="py-2 pr-3 text-zinc-500">{option.deliveryEstimate}</td>
+                          <td className="py-2 pr-3 text-white">
+                            {formatPrice(option.shippingCostGbp)}
+                          </td>
+                          <td className="py-2 pr-3 font-medium text-emerald-300">
+                            {formatPrice(option.totalGbp)}
+                          </td>
+                          <td className="py-2">
+                            <button
+                              type="button"
+                              onClick={() => applyShippingOption(option.id)}
+                              className={`rounded-lg px-2.5 py-1 text-xs ${
+                                selectedShippingId === option.id
+                                  ? "bg-emerald-600 text-white"
+                                  : "border border-zinc-700 text-zinc-300 hover:border-emerald-500/40"
+                              }`}
+                            >
+                              {selectedShippingId === option.id ? "Selected" : "Use"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Product subtotal: {formatPrice(shippingQuote.productSubtotalGbp)} ·{" "}
+                    {activeShipCountry.postcodeLabel}: {shippingQuote.destPostcode || "—"}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <input
+              type="number"
+              min="0.3"
+              step="0.01"
+              placeholder="Total amount (£)"
+              value={manualAmount}
+              onChange={(e) => setManualAmount(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white sm:col-span-2"
+            />
+            {manualShippingDetails && (
+              <pre className="whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 text-xs text-zinc-400 sm:col-span-2">
+                {manualShippingDetails}
+              </pre>
+            )}
             <textarea
-              placeholder="Shipping notes (Texas address, CJ method, etc.)"
+              placeholder="Customer address & extra notes"
               value={manualNotes}
               onChange={(e) => setManualNotes(e.target.value)}
               rows={2}
@@ -1099,7 +1357,7 @@ export default function AdminPage() {
               creatingManualPayment ||
               !manualName ||
               !manualEmail ||
-              !manualDescription ||
+              (!manualDescription && !manualProductId) ||
               !manualAmount ||
               parseFloat(manualAmount) < 0.3
             }
@@ -1125,9 +1383,20 @@ export default function AdminPage() {
                 >
                   <div>
                     <p className="font-medium text-white">{payment.customer_name}</p>
+                    {payment.productTitle && (
+                      <p className="text-sm text-emerald-300">
+                        {payment.quantity ?? 1}x {payment.productTitle}
+                        {payment.supplierSku ? ` · ${payment.supplierSku}` : ""}
+                      </p>
+                    )}
                     <p className="text-sm text-zinc-400">
                       {payment.manual_description} · {formatPrice(payment.total)}
                     </p>
+                    {payment.supplierVid && (
+                      <p className="mt-1 font-mono text-xs text-zinc-500">
+                        CJ vid: {payment.supplierVid}
+                      </p>
+                    )}
                     {payment.manual_notes && (
                       <p className="mt-1 text-xs text-zinc-500">{payment.manual_notes}</p>
                     )}

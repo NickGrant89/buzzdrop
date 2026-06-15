@@ -72,6 +72,61 @@ function pickCheapestOption(
   )[0];
 }
 
+function toShippingQuote(
+  option: FreightOption & { fromCountryCode: string }
+): ShippingQuoteOption {
+  const shippingUsd = option.logisticPrice ?? 0;
+  return {
+    logisticName: option.logisticName!.trim(),
+    fromCountryCode: option.fromCountryCode,
+    shippingCostGbp:
+      shippingUsd > 0 ? usdToStoreCurrency(shippingUsd) : defaultCjShippingEstimate(),
+    deliveryEstimate: option.logisticAging?.trim() || "—",
+  };
+}
+
+export type ShippingQuoteOption = {
+  logisticName: string;
+  fromCountryCode: string;
+  shippingCostGbp: number;
+  deliveryEstimate: string;
+};
+
+export async function listCjShippingQuotes(
+  items: Array<{ vid: string; quantity: number }>,
+  destCountryCode = "GB",
+  postcode?: string
+): Promise<ShippingQuoteOption[]> {
+  if (items.length === 0 || !items[0]?.vid) return [];
+
+  const override = process.env.CJ_LOGISTIC_NAME?.trim();
+  if (override) {
+    return [
+      {
+        logisticName: override,
+        fromCountryCode: process.env.CJ_FROM_COUNTRY_CODE ?? cjConfig.fromCountryCode,
+        shippingCostGbp: defaultCjShippingEstimate(),
+        deliveryEstimate: "Configured method",
+      },
+    ];
+  }
+
+  const options = await fetchFreightOptions(items, destCountryCode, postcode);
+  const unique = new Map<string, ShippingQuoteOption>();
+
+  for (const option of options) {
+    if (!option.logisticName?.trim()) continue;
+    const quote = toShippingQuote(option);
+    const key = `${quote.fromCountryCode}:${quote.logisticName}`;
+    const existing = unique.get(key);
+    if (!existing || quote.shippingCostGbp < existing.shippingCostGbp) {
+      unique.set(key, quote);
+    }
+  }
+
+  return [...unique.values()].sort((a, b) => a.shippingCostGbp - b.shippingCostGbp);
+}
+
 export async function estimateCjShipping(
   items: Array<{ vid: string; quantity: number }>,
   destCountryCode = "GB",

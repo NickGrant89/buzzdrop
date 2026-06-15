@@ -45,3 +45,7 @@ next-env.d.ts
 
 # Large AI-generated social drafts (regenerate with npm run generate:social)
 /public/social/buzzdrop-fb-*.png
+
+# Generated ad videos — keep local, run: npm run generate:videos
+/public/social/videos/*.mp4
+/public/social/videos/*-slide.jpg

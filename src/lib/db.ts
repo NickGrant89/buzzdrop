@@ -42,6 +42,9 @@ export type Order = {
   shipping_phone: string;
   status: "pending" | "paid" | "fulfilled" | "shipped" | "failed";
   total: number;
+  order_kind: "standard" | "manual";
+  manual_description: string;
+  manual_notes: string;
   supplier_order_id: string | null;
   tracking_number: string | null;
   created_at: string;
@@ -255,6 +258,16 @@ function migrateSchema(database: Database.Database) {
     if (!orderCols.includes(col)) {
       database.exec(`ALTER TABLE orders ADD COLUMN ${col} ${def}`);
     }
+  }
+
+  if (!orderCols.includes("order_kind")) {
+    database.exec("ALTER TABLE orders ADD COLUMN order_kind TEXT NOT NULL DEFAULT 'standard'");
+  }
+  if (!orderCols.includes("manual_description")) {
+    database.exec("ALTER TABLE orders ADD COLUMN manual_description TEXT NOT NULL DEFAULT ''");
+  }
+  if (!orderCols.includes("manual_notes")) {
+    database.exec("ALTER TABLE orders ADD COLUMN manual_notes TEXT NOT NULL DEFAULT ''");
   }
 }
 

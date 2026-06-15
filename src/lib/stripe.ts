@@ -101,6 +101,10 @@ function finalizePaidOrder(orderId: string): string | null {
     .prepare("SELECT * FROM order_items WHERE order_id = ?")
     .all(orderId) as Array<{ product_id: string; quantity: number }>;
 
+  if (items.length === 0) {
+    return orderId;
+  }
+
   const transaction = db.transaction(() => {
     for (const item of items) {
       db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(
@@ -192,6 +196,83 @@ export async function handlePaymentIntentComplete(
   if (!orderId) return null;
 
   return finalizePaidOrder(orderId);
+}
+
+export async function createManualPaymentCheckout(
+  orderId: string,
+  appUrl: string
+): Promise<{ demo: true; orderId: string } | { demo: false; url: string; orderId: string }> {
+  const order = db
+    .prepare(
+      `SELECT id, customer_email, customer_name, total, status, manual_description, order_kind
+       FROM orders WHERE id = ?`
+    )
+    .get(orderId) as
+    | {
+        id: string;
+        customer_email: string;
+        customer_name: string;
+        total: number;
+        status: string;
+        manual_description: string;
+        order_kind: string;
+      }
+    | undefined;
+
+  if (!order || order.order_kind !== "manual") {
+    throw new Error("Manual payment not found");
+  }
+  if (order.status !== "pending") {
+    throw new Error("This payment link has already been used");
+  }
+
+  const amount = Math.round(order.total * 100);
+  if (amount < 30) {
+    throw new Error("Amount is below Stripe minimum (£0.30)");
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    return { demo: true, orderId };
+  }
+
+  const description = order.manual_description || "BuzzDrop order";
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: order.customer_email,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: storeConfig.currency.toLowerCase(),
+          unit_amount: amount,
+          product_data: {
+            name: description.slice(0, 120),
+            description: "BuzzDrop manual order",
+          },
+        },
+      },
+    ],
+    metadata: {
+      order_id: orderId,
+      order_kind: "manual",
+      customer_name: order.customer_name,
+    },
+    success_url: `${appUrl}/order/success?order_id=${orderId}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/pay/${orderId}?cancelled=1`,
+  });
+
+  if (!session.url) {
+    throw new Error("Stripe did not return a checkout URL");
+  }
+
+  db.prepare("UPDATE orders SET stripe_session_id = ?, updated_at = ? WHERE id = ?").run(
+    session.id,
+    new Date().toISOString(),
+    orderId
+  );
+
+  return { demo: false, url: session.url, orderId };
 }
 
 export async function handleCheckoutComplete(sessionId: string): Promise<string | null> {

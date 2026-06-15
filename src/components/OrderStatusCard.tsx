@@ -48,11 +48,15 @@ export function OrderStatusCard({
 
       <p className="mb-2 text-sm text-zinc-500">Items</p>
       <ul className="mb-4 space-y-2">
-        {items.map((item, i) => (
-          <li key={i} className="text-sm text-zinc-400">
-            {item.quantity}x {item.title}
-          </li>
-        ))}
+        {items.length > 0 ? (
+          items.map((item, i) => (
+            <li key={i} className="text-sm text-zinc-400">
+              {item.quantity}x {item.title}
+            </li>
+          ))
+        ) : (
+          <li className="text-sm text-zinc-400">Custom order — we&apos;ll ship as quoted</li>
+        )}
       </ul>
 
       {order.tracking_number ? (

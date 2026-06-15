@@ -4,7 +4,6 @@ import { getStoreStats } from "@/lib/products";
 import { getHiddenProducts, getHiddenProductCount, restoreProduct } from "@/lib/hidden-products";
 import { getHeroProducts, syncHeroProductPins } from "@/lib/hero-products";
 import { buildAdUrl } from "@/lib/meta-pixel";
-import { buildTikTokManualPost } from "@/lib/marketing/tiktok-manual-post";
 import { getRecentLogs } from "@/lib/automation/logger";
 import { runJobManually } from "@/lib/automation/scheduler";
 import { isCjConfigured } from "@/lib/config";
@@ -16,6 +15,9 @@ import { deletePendingOrdersWithLog } from "@/lib/orders-maintenance";
 import { testTikTokShopConnection, isTikTokShopConfigured } from "@/lib/tiktok-shop/client";
 import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
 import { automationScheduleLabels } from "@/lib/automation/schedule-labels";
+import { buildTikTokManualPosts } from "@/lib/marketing/tiktok-content";
+import { createManualPayment, listPendingManualPayments } from "@/lib/manual-payments";
+import { getSiteUrl } from "@/lib/seo";
 
 export async function GET() {
   const stats = getStoreStats();
@@ -147,10 +149,14 @@ export async function GET() {
         adUrlFacebook: buildAdUrl(base, "facebook", campaign),
         adUrlInstagram: buildAdUrl(base, "instagram", campaign),
         adUrlTikTok: buildAdUrl(base, "tiktok", campaign),
-        tiktokPost: buildTikTokManualPost(h.product, base),
       };
     }),
     hiddenProducts,
+    tikTokPosts: buildTikTokManualPosts(heroProducts.map((h) => h.product)),
+    pendingManualPayments: listPendingManualPayments(10).map((p) => ({
+      ...p,
+      payUrl: `${getSiteUrl()}/pay/${p.id}`,
+    })),
     metaPixel: {
       configured: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()),
     },
@@ -232,6 +238,41 @@ export async function POST(request: Request) {
     }
     const result = restoreProduct(productId);
     return NextResponse.json({ success: result.ok, message: result.message });
+  }
+
+  if (body.action === "create_manual_payment") {
+    const customerName = typeof body.customerName === "string" ? body.customerName.trim() : "";
+    const customerEmail = typeof body.customerEmail === "string" ? body.customerEmail.trim() : "";
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
+    const amountGbp = Number(body.amountGbp);
+
+    if (!customerName || !customerEmail || !description) {
+      return NextResponse.json(
+        { success: false, message: "Name, email and description are required" },
+        { status: 400 }
+      );
+    }
+    if (!Number.isFinite(amountGbp) || amountGbp < 0.3) {
+      return NextResponse.json(
+        { success: false, message: "Amount must be at least £0.30" },
+        { status: 400 }
+      );
+    }
+
+    const result = createManualPayment({
+      customerName,
+      customerEmail,
+      description,
+      amountGbp,
+      notes: notes || undefined,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Payment link created — send the link to your customer",
+      ...result,
+    });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

@@ -60,45 +60,75 @@ function productHook(title, priceNum) {
   if (/note|message board|led.*board/.test(t)) return "It glows like a neon sign";
   if (/g shaped|bluetooth|speaker|wireless charg|lamp/.test(t)) return "3-in-1 bedside essential";
   if (/cooler|air condition|cooling|humidifier/.test(t)) return "Beat the heat at your desk";
-  if (/cat|dog|pet|brush/.test(t)) return "Pet owners are obsessed";
   if (/printer|label/.test(t)) return "Study hack under £50";
+  if (/cat|dog|pet|brush|steam/.test(t)) return "Pet owners are obsessed";
+  if (/jacket|heated|winter/.test(t)) return "Winter essential under £45";
+  if (/hair removal|crystal/.test(t)) return "Beauty hack going viral";
+  if (/washer|sink|spray/.test(t)) return "Kitchen upgrade for less";
   if (priceNum <= 30) return "TikTok made me buy it";
   if (priceNum <= 45) return "Viral find under £45";
   return "Trending on BuzzDrop";
 }
 
-const FALLBACK_HEROES = [
-  {
-    slug: "note-board-creative-led-night-light-usb-message-953728",
-    title: "LED Note Board",
-    subtitle: "Write messages that glow at night",
-    price: "£22.99",
-    priceNum: 22.99,
-    hook: "It glows like a neon sign",
-    cta: "Free UK delivery",
-    image_url: "https://cf.cjdropshipping.com/1e288b3c-b238-47f1-8087-ca3ae2d92709.jpg",
-  },
-  {
-    slug: "intelligent-g-shaped-led-lamp-bluetooth-speaker-567488",
-    title: "G-Lamp + Speaker",
-    subtitle: "Light · sound · wireless charge",
-    price: "£51.99",
-    priceNum: 51.99,
-    hook: "3-in-1 bedside essential",
-    cta: "Free UK delivery",
-    image_url: "https://cf.cjdropshipping.com/5651039d-38e6-4851-aaef-38be1445e4a4.jpg",
-  },
-  {
-    slug: "air-conditioner-air-cooler-fan-water-cooling-fan-662976",
-    title: "Portable Air Cooler",
-    subtitle: "Personal cooling for home or desk",
-    price: "£27.99",
-    priceNum: 27.99,
-    hook: "Beat the heat at your desk",
-    cta: "Free UK delivery",
-    image_url: "https://cf.cjdropshipping.com/quick/product/b08e3a55-0f55-442b-8355-85b43df714d4.jpg",
-  },
-];
+const HERO_PRICE_MIN = 15;
+const HERO_PRICE_MAX = 45;
+const HERO_MIN_MARGIN_GBP = 4;
+
+function marginGbp(product) {
+  return Math.round((Number(product.retail_price) - Number(product.supplier_cost)) * 100) / 100;
+}
+
+function scoreHeroProduct(product) {
+  const margin = marginGbp(product);
+  let score = 0;
+  if (margin >= HERO_MIN_MARGIN_GBP) score += Math.min(Math.max(margin, 0) * 4, 35);
+  score += Math.min(Number(product.trend_score) || 0, 99) * 0.4;
+  const price = Number(product.retail_price);
+  if (price >= HERO_PRICE_MIN && price <= HERO_PRICE_MAX) score += 20;
+  else if (price >= 10 && price <= 55) score += 8;
+  const views = Number(product.view_count) || 0;
+  if (views > 0) score += Math.min(Math.log10(views + 1) * 5, 10);
+  if ((product.image_url || "").includes("placeholder")) score -= 25;
+  if (Number(product.stock) <= 0) score -= 50;
+  return score;
+}
+
+/** Mirror admin hero picker — diverse categories, best for ads. */
+function pickHeroProducts(products, limit = 3) {
+  const eligible = products
+    .filter(
+      (p) =>
+        p.is_active === 1 &&
+        p.supplier_pid &&
+        Number(p.stock) > 0 &&
+        scoreHeroProduct(p) > 0 &&
+        marginGbp(p) >= 2
+    )
+    .sort((a, b) => scoreHeroProduct(b) - scoreHeroProduct(a));
+
+  const picked = [];
+  const usedCategories = new Set();
+
+  for (const product of eligible) {
+    if (picked.length >= limit) break;
+    const cat = (product.category || "").toLowerCase();
+    if (picked.length < limit - 1 && usedCategories.has(cat) && eligible.length > limit * 2) {
+      continue;
+    }
+    picked.push(product);
+    usedCategories.add(cat);
+  }
+
+  if (picked.length < limit) {
+    for (const product of eligible) {
+      if (picked.length >= limit) break;
+      if (picked.some((p) => p.slug === product.slug)) continue;
+      picked.push(product);
+    }
+  }
+
+  return picked.slice(0, limit);
+}
 
 function heroFromProduct(p) {
   const priceNum = Number(p.retail_price);
@@ -117,21 +147,33 @@ function heroFromProduct(p) {
 
 async function loadHeroes(site) {
   try {
+    const heroRes = await fetch(`${site}/api/products/heroes`);
+    if (heroRes.ok) {
+      const data = await heroRes.json();
+      if (data.heroes?.length > 0) {
+        console.log("Using hero products from /api/products/heroes");
+        return data.heroes.map(heroFromProduct);
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+
+  try {
     const res = await fetch(`${site}/api/products`);
     if (!res.ok) throw new Error("Could not fetch products");
     const data = await res.json();
     const products = data.products ?? [];
-    const pick = (match) => products.find((p) => match.test(p.title.toLowerCase()));
-    const note = pick(/note|message board|led.*board/);
-    const lamp = pick(/g shaped|bluetooth speaker|wireless charg/);
-    const cooler = pick(/cooler|air condition|cooling fan/);
-    const chosen = [note, lamp, cooler, products[0]].filter(Boolean);
-    const unique = [...new Map(chosen.map((p) => [p.slug, p])).values()].slice(0, 3);
-    if (unique.length > 0) return unique.map(heroFromProduct);
+    const heroes = pickHeroProducts(products, 3);
+    if (heroes.length > 0) {
+      console.log("Using hero products from live catalog scoring");
+      return heroes.map(heroFromProduct);
+    }
   } catch (err) {
-    console.warn("Using fallback heroes:", err instanceof Error ? err.message : err);
+    console.warn("Could not load heroes:", err instanceof Error ? err.message : err);
   }
-  return FALLBACK_HEROES;
+
+  throw new Error("No hero products found — sync products first");
 }
 
 async function blurredBg(imageBuffer, darken = 0.55) {

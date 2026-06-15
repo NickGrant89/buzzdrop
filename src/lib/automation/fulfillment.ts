@@ -7,7 +7,11 @@ import { parseUkAddress } from "../utils";
 
 export async function fulfillPendingOrders(): Promise<number> {
   const pendingOrders = db
-    .prepare("SELECT * FROM orders WHERE status = 'paid' ORDER BY created_at ASC")
+    .prepare(
+      `SELECT * FROM orders
+       WHERE status = 'paid' AND COALESCE(order_kind, 'standard') = 'standard'
+       ORDER BY created_at ASC`
+    )
     .all() as Array<{
     id: string;
     customer_name: string;

@@ -9,6 +9,8 @@ function sanitizeOrder(order: Record<string, unknown>) {
     tracking_number: (order.tracking_number as string | null) ?? null,
     created_at: order.created_at as string,
     customer_email: order.customer_email as string,
+    order_kind: (order.order_kind as string | undefined) ?? "standard",
+    manual_description: (order.manual_description as string | undefined) ?? "",
   };
 }
 

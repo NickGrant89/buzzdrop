@@ -21,6 +21,8 @@ import {
   EyeOff,
   RotateCcw,
   ChevronDown,
+  ChevronRight,
+  CreditCard,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
@@ -117,18 +119,6 @@ type AdminData = {
     adUrlFacebook: string;
     adUrlInstagram: string;
     adUrlTikTok: string;
-    tiktokPost: {
-      hook: string;
-      caption: string;
-      hashtags: string[];
-      hashtagsLine: string;
-      onScreenText: string[];
-      videoScript: string;
-      soundSuggestion: string;
-      pinnedComment: string;
-      seoKeywords: string[];
-      checklist: string[];
-    };
   }>;
   metaPixel: { configured: boolean };
   hiddenProducts: Array<{
@@ -141,6 +131,33 @@ type AdminData = {
     reason: string;
     hiddenAt: string;
   }>;
+  tikTokPosts: Array<{
+    heroIndex: number;
+    productId: string;
+    title: string;
+    slug: string;
+    priceLabel: string;
+    productUrl: string;
+    videoFilename: string;
+    videoLocalPath: string;
+    caption: string;
+    hashtags: string;
+    fullPost: string;
+    pinComment: string;
+    bioLink: string;
+    hooks: Array<{ label: string; openingText: string; shotNotes: string }>;
+  }>;
+  pendingManualPayments: Array<{
+    id: string;
+    customer_email: string;
+    customer_name: string;
+    total: number;
+    manual_description: string;
+    manual_notes: string;
+    status: string;
+    created_at: string;
+    payUrl: string;
+  }>;
 };
 
 export default function AdminPage() {
@@ -149,24 +166,21 @@ export default function AdminPage() {
   const [runningJob, setRunningJob] = useState<string | null>(null);
   const [jobMessage, setJobMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [testingWebhook, setTestingWebhook] = useState(false);
-  const [copiedAdUrl, setCopiedAdUrl] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [hiddenProductsOpen, setHiddenProductsOpen] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualDescription, setManualDescription] = useState("");
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [creatingManualPayment, setCreatingManualPayment] = useState(false);
 
-  async function copyAdUrl(key: string, url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedAdUrl(key);
-      setTimeout(() => setCopiedAdUrl(null), 2000);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  async function copyTikTokField(key: string, text: string) {
+  async function copyText(key: string, text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedAdUrl(key);
-      setTimeout(() => setCopiedAdUrl(null), 2000);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
     } catch {
       /* ignore */
     }
@@ -281,6 +295,40 @@ export default function AdminPage() {
     setRestoringId(null);
   }
 
+  async function createManualPaymentLink() {
+    setCreatingManualPayment(true);
+    setJobMessage(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_manual_payment",
+        customerName: manualName,
+        customerEmail: manualEmail,
+        description: manualDescription,
+        amountGbp: parseFloat(manualAmount),
+        notes: manualNotes,
+      }),
+    });
+    const result = await res.json().catch(() => ({}));
+    setCreatingManualPayment(false);
+    setJobMessage({
+      ok: result.success === true,
+      text: result.success
+        ? "Payment link created and copied — send it to your customer"
+        : (result.message ?? "Could not create payment link"),
+    });
+    if (result.success && result.payUrl) {
+      await copyText("manual-pay-url", result.payUrl);
+      setManualName("");
+      setManualEmail("");
+      setManualDescription("");
+      setManualAmount("");
+      setManualNotes("");
+    }
+    await fetchData();
+  }
+
   async function handleLogout() {
     await fetch("/api/auth/admin", { method: "DELETE" });
     window.location.href = "/admin/login";
@@ -366,25 +414,6 @@ export default function AdminPage() {
           >
             {jobMessage.text}
           </div>
-        )}
-
-        {data.heroProducts.length > 0 && (
-          <nav className="mb-6 flex flex-wrap gap-2 text-sm">
-            <a
-              href="#hero-tiktok-posts"
-              className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-3 py-1.5 text-pink-200 hover:border-pink-400/50"
-            >
-              TikTok posts (copy & paste) ↑
-            </a>
-            {data.hiddenProducts.length > 0 && (
-              <a
-                href="#hidden-products"
-                className="rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-zinc-400 hover:text-white"
-              >
-                Hidden products ({data.stats.hiddenProductCount})
-              </a>
-            )}
-          </nav>
         )}
 
         {/* CJ Dropshipping connection */}
@@ -477,7 +506,7 @@ export default function AdminPage() {
               <h2 className="text-lg font-semibold text-white">Social Auto-Posting</h2>
               <p className="text-sm text-zinc-400">
                 {data.social.enabled
-                  ? `Active on ${data.social.platforms.join(", ") || "no platforms"} · ${data.social.schedule}`
+                  ? `Facebook & Instagram via Make · ${data.social.schedule}`
                   : "Add SOCIAL_WEBHOOK_URL in Railway (Zapier or Make webhook) to start posting"}
               </p>
               {data.socialLastRun && (
@@ -648,15 +677,10 @@ export default function AdminPage() {
 
         {/* Hero products — auto-picked for ads & TikTok */}
         {data.heroProducts.length > 0 && (
-          <div
-            id="hero-tiktok-posts"
-            className="mb-8 scroll-mt-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6"
-          >
-            <h2 className="text-lg font-semibold text-white">Hero Products & TikTok posts</h2>
+          <div className="mb-8 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
+            <h2 className="text-lg font-semibold text-white">Hero Products</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Auto-picked for Meta ads — each card has a{" "}
-              <span className="text-pink-300">TikTok — paste manually</span> box (caption, hashtags,
-              video script, pin comment). Pinned heroes are never auto-hidden from the shop.
+              Auto-picked for Meta ads & TikTok — pinned heroes are never auto-hidden from the shop
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               {data.heroProducts.map((hero, i) => (
@@ -687,15 +711,15 @@ export default function AdminPage() {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => copyAdUrl(`${hero.id}-${key}`, url)}
+                        onClick={() => copyText(`${hero.id}-${key}`, url)}
                         className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-violet-500/40 hover:text-white"
                       >
-                        {copiedAdUrl === `${hero.id}-${key}` ? (
+                        {copiedKey === `${hero.id}-${key}` ? (
                           <Check className="h-3 w-3 text-emerald-400" />
                         ) : (
                           <Copy className="h-3 w-3" />
                         )}
-                        {copiedAdUrl === `${hero.id}-${key}` ? "Copied" : label}
+                        {copiedKey === `${hero.id}-${key}` ? "Copied" : label}
                       </button>
                     ))}
                   </div>
@@ -707,81 +731,84 @@ export default function AdminPage() {
                   >
                     View product →
                   </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                  <div className="mt-4 rounded-lg border border-zinc-700/80 bg-zinc-950/80 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-pink-400">
-                      TikTok — paste manually
-                    </p>
-                    <p className="mt-2 text-xs leading-relaxed text-zinc-300">
-                      <span className="font-medium text-white">Hook:</span> {hero.tiktokPost.hook}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(
-                        [
-                          ["caption", "Caption", hero.tiktokPost.caption],
-                          ["hashtags", "Hashtags", hero.tiktokPost.hashtagsLine],
-                          ["script", "Video script", hero.tiktokPost.videoScript],
-                          ["pin", "Pin comment", hero.tiktokPost.pinnedComment],
-                          [
-                            "all",
-                            "Copy all",
-                            [
-                              "=== TIKTOK CAPTION ===",
-                              hero.tiktokPost.caption,
-                              "",
-                              "=== VIDEO SCRIPT ===",
-                              hero.tiktokPost.videoScript,
-                              "",
-                              "=== PIN THIS COMMENT ===",
-                              hero.tiktokPost.pinnedComment,
-                              "",
-                              "=== ON-SCREEN TEXT ===",
-                              hero.tiktokPost.onScreenText.join(" · "),
-                              "",
-                              `Sound: ${hero.tiktokPost.soundSuggestion}`,
-                            ].join("\n"),
-                          ],
-                        ] as const
-                      ).map(([key, label, text]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => copyTikTokField(`${hero.id}-tt-${key}`, text)}
-                          className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 hover:border-pink-500/40 hover:text-white"
-                        >
-                          {copiedAdUrl === `${hero.id}-tt-${key}` ? (
-                            <Check className="h-3 w-3 text-emerald-400" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          {copiedAdUrl === `${hero.id}-tt-${key}` ? "Copied" : label}
-                        </button>
-                      ))}
-                    </div>
-                    <details className="mt-2 group">
-                      <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">
-                        On-screen text · sound · checklist
-                      </summary>
-                      <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-zinc-400">
-                        <p>
-                          <span className="text-zinc-500">On-screen:</span>{" "}
-                          {hero.tiktokPost.onScreenText.join(" · ")}
-                        </p>
-                        <p>
-                          <span className="text-zinc-500">Sound:</span> {hero.tiktokPost.soundSuggestion}
-                        </p>
-                        <p>
-                          <span className="text-zinc-500">SEO:</span>{" "}
-                          {hero.tiktokPost.seoKeywords.join(", ")}
-                        </p>
-                        <ul className="list-inside list-disc space-y-0.5">
-                          {hero.tiktokPost.checklist.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </details>
+        {/* TikTok manual posts — copy captions & hashtags from your phone */}
+        {data.tikTokPosts.length > 0 && (
+          <div className="mb-8 rounded-2xl border border-pink-500/20 bg-pink-500/5 p-6">
+            <h2 className="text-lg font-semibold text-white">TikTok Manual Posts</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Copy captions, hashtags & hooks — post from your phone. FB/Instagram still auto-post via
+              Make above; TikTok has no API connected yet.
+            </p>
+            <p className="mt-2 text-xs text-zinc-500">
+              Bio link: <span className="text-zinc-300">{data.tikTokPosts[0]?.bioLink}</span> · Videos
+              are local only — run <code className="text-zinc-400">npm run generate:videos</code>, then
+              AirDrop from <span className="text-zinc-300">public/social/videos/</span> (not in git)
+            </p>
+            <div className="mt-4 space-y-6">
+              {data.tikTokPosts.map((post) => (
+                <div
+                  key={post.productId}
+                  className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+                >
+                  <p className="text-xs font-medium uppercase tracking-wide text-pink-400">
+                    Hero #{post.heroIndex} · {post.priceLabel}
+                  </p>
+                  <p className="mt-2 line-clamp-2 font-medium text-white">{post.title}</p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["caption", "Caption", post.caption],
+                        ["hashtags", "Hashtags", post.hashtags],
+                        ["full", "Full post", post.fullPost],
+                        ["pin", "Pin comment", post.pinComment],
+                        ["url", "Product URL", post.productUrl],
+                        ["video", "Video path", post.videoLocalPath],
+                      ] as const
+                    ).map(([key, label, text]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => copyText(`tt-${post.productId}-${key}`, text)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-pink-500/40 hover:text-white"
+                      >
+                        {copiedKey === `tt-${post.productId}-${key}` ? (
+                          <Check className="h-3 w-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        {copiedKey === `tt-${post.productId}-${key}` ? "Copied" : label}
+                      </button>
+                    ))}
                   </div>
+
+                  <div className="mt-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      Video hooks (film 3 × 15–30 sec)
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {post.hooks.map((hook) => (
+                        <li
+                          key={hook.label}
+                          className="rounded-lg border border-zinc-800/80 bg-zinc-950/50 px-3 py-2 text-sm"
+                        >
+                          <span className="font-medium text-zinc-200">{hook.label}:</span>{" "}
+                          <span className="text-pink-300">&ldquo;{hook.openingText}&rdquo;</span>
+                          <span className="mt-0.5 block text-xs text-zinc-500">{hook.shotNotes}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <pre className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-950/80 p-3 text-xs text-zinc-400">
+                    {post.fullPost}
+                  </pre>
                 </div>
               ))}
             </div>
@@ -803,33 +830,37 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* Hidden products */}
+        {/* Hidden products — collapsed by default */}
         {data.hiddenProducts.length > 0 && (
-          <details
-            id="hidden-products"
-            className="group mb-8 scroll-mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6"
-          >
-            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex flex-1 items-start gap-2">
-                  <ChevronDown className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500 transition group-open:rotate-180" />
-                  <div>
-                    <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
-                      <EyeOff className="h-5 w-5 text-zinc-500" />
-                      Hidden products
-                    </h2>
-                    <p className="mt-1 text-sm text-zinc-400">
-                      Off the shop but still in your catalog — restore to show again (may be
-                      re-hidden on next sync if over the {data.automation.catalogMaxActive} cap).
-                      Click to expand.
-                    </p>
-                  </div>
+          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <button
+              type="button"
+              onClick={() => setHiddenProductsOpen((open) => !open)}
+              className="flex w-full flex-wrap items-start justify-between gap-3 text-left"
+            >
+              <div className="flex items-start gap-2">
+                {hiddenProductsOpen ? (
+                  <ChevronDown className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500" />
+                ) : (
+                  <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500" />
+                )}
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                    <EyeOff className="h-5 w-5 text-zinc-500" />
+                    Hidden products
+                  </h2>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Off the shop but still in your catalog — click to{" "}
+                    {hiddenProductsOpen ? "collapse" : "expand"}
+                  </p>
                 </div>
-                <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-sm text-zinc-400">
-                  {data.stats.hiddenProductCount} hidden
-                </span>
               </div>
-            </summary>
+              <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-sm text-zinc-400">
+                {data.stats.hiddenProductCount} hidden
+              </span>
+            </button>
+            {hiddenProductsOpen && (
+              <>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
@@ -886,7 +917,13 @@ export default function AdminPage() {
                 hidden products
               </p>
             )}
-          </details>
+            <p className="mt-2 text-xs text-zinc-600">
+              Restored products may be re-hidden on next sync if over the{" "}
+              {data.automation.catalogMaxActive} cap.
+            </p>
+              </>
+            )}
+          </div>
         )}
 
         {/* Manual job triggers */}
@@ -1002,6 +1039,115 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Manual payment links — international / custom orders */}
+        <div className="mt-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">Manual Payment Links</h2>
+          </div>
+          <p className="mt-1 text-sm text-zinc-400">
+            Create a one-off Stripe checkout for custom orders (e.g. US shipping). You fulfil
+            manually in CJ after payment — auto-fulfilment is skipped.
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <input
+              type="text"
+              placeholder="Customer name"
+              value={manualName}
+              onChange={(e) => setManualName(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
+            />
+            <input
+              type="email"
+              placeholder="Customer email"
+              value={manualEmail}
+              onChange={(e) => setManualEmail(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
+            />
+            <input
+              type="text"
+              placeholder="Description (e.g. Note Board + US shipping)"
+              value={manualDescription}
+              onChange={(e) => setManualDescription(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white sm:col-span-2"
+            />
+            <input
+              type="number"
+              min="0.3"
+              step="0.01"
+              placeholder="Amount (£)"
+              value={manualAmount}
+              onChange={(e) => setManualAmount(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
+            />
+            <textarea
+              placeholder="Shipping notes (Texas address, CJ method, etc.)"
+              value={manualNotes}
+              onChange={(e) => setManualNotes(e.target.value)}
+              rows={2}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white sm:col-span-2"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={createManualPaymentLink}
+            disabled={
+              creatingManualPayment ||
+              !manualName ||
+              !manualEmail ||
+              !manualDescription ||
+              !manualAmount ||
+              parseFloat(manualAmount) < 0.3
+            }
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {creatingManualPayment ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CreditCard className="h-4 w-4" />
+            )}
+            Create payment link
+          </button>
+
+          {data.pendingManualPayments.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Awaiting payment
+              </p>
+              {data.pendingManualPayments.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-medium text-white">{payment.customer_name}</p>
+                    <p className="text-sm text-zinc-400">
+                      {payment.manual_description} · {formatPrice(payment.total)}
+                    </p>
+                    {payment.manual_notes && (
+                      <p className="mt-1 text-xs text-zinc-500">{payment.manual_notes}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyText(`pay-${payment.id}`, payment.payUrl)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:border-emerald-500/40 hover:text-white"
+                  >
+                    {copiedKey === `pay-${payment.id}` ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    Copy link
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Recent orders */}

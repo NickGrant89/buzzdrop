@@ -1,4 +1,5 @@
 import { db, type Product } from "./db";
+import { formatCategoryDisplay, categorySlug, getShopCategories } from "./categories";
 
 export function getActiveProducts(limit?: number): Product[] {
   const sql = limit
@@ -22,6 +23,17 @@ export function getCategories(): string[] {
     .prepare("SELECT DISTINCT category FROM products WHERE is_active = 1 ORDER BY category")
     .all() as { category: string }[];
   return rows.map((r) => r.category);
+}
+
+export function resolveCategorySlug(slug: string): { label: string; slug: string } | undefined {
+  const labels = getShopCategories(getCategories());
+  return labels
+    .map((label) => ({ label, slug: categorySlug(label) }))
+    .find((entry) => entry.slug === slug);
+}
+
+export function getProductsByCategoryLabel(label: string): Product[] {
+  return getActiveProducts().filter((product) => formatCategoryDisplay(product.category) === label);
 }
 
 export function getStoreStats() {

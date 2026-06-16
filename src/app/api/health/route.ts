@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
 import { db, getSetting } from "@/lib/db";
 import { isSocialPostingEnabled } from "@/lib/marketing/social-config";
+import { isMetaCapiConfigured } from "@/lib/meta-capi";
 
 function countSocialPostsSince(iso: string): number {
   const row = db
@@ -36,6 +37,10 @@ export async function GET() {
       lastRun: getSetting("social_last_run_at", "") || null,
       schedulerStarted: getSetting("scheduler_started_at", "") || null,
       postsToday: countSocialPostsSince(todayStart.toISOString()),
+    },
+    meta: {
+      pixel: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()),
+      capi: isMetaCapiConfigured(),
     },
   });
 }

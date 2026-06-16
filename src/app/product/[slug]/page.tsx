@@ -5,8 +5,9 @@ import { notFound } from "next/navigation";
 import { StoreLayout } from "@/components/StoreLayout";
 import { ProductDetailClient } from "./ProductDetailClient";
 import { getProductBySlug } from "@/lib/products";
-import { formatCategoryDisplay } from "@/lib/categories";
-import { buildPageMetadata, productJsonLd } from "@/lib/seo";
+import { formatCategoryDisplay, categorySlug } from "@/lib/categories";
+import { getProductFaqs, getProductSeoDescription, getProductSeoTitle } from "@/lib/product-seo";
+import { buildPageMetadata, productJsonLd, faqJsonLd, breadcrumbJsonLd } from "@/lib/seo";
 import { formatPrice } from "@/lib/utils";
 import { Truck, Shield, ArrowLeft } from "lucide-react";
 
@@ -22,8 +23,8 @@ export async function generateMetadata({
   if (!product) return buildPageMetadata({ title: "Product not found", noIndex: true });
 
   return buildPageMetadata({
-    title: product.title,
-    description: product.description.slice(0, 160),
+    title: getProductSeoTitle(product),
+    description: getProductSeoDescription(product),
     path: `/product/${product.slug}`,
     image: product.image_url,
   });
@@ -40,12 +41,30 @@ export default async function ProductPage({
   if (!product) notFound();
 
   const categoryLabel = formatCategoryDisplay(product.category);
+  const categoryPath = `/category/${categorySlug(categoryLabel)}`;
+  const faqs = getProductFaqs(product);
 
   return (
     <StoreLayout>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd(product)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd(faqs)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            breadcrumbJsonLd([
+              { name: "Home", path: "/" },
+              { name: categoryLabel, path: categoryPath },
+              { name: product.title, path: `/product/${product.slug}` },
+            ])
+          ),
+        }}
       />
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <Link
@@ -70,7 +89,9 @@ export default async function ProductPage({
 
           <div>
             <span className="text-sm font-medium uppercase tracking-wider text-amber-400">
-              {categoryLabel}
+              <Link href={categoryPath} className="hover:text-amber-300">
+                {categoryLabel}
+              </Link>
             </span>
             <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{product.title}</h1>
 
@@ -112,6 +133,18 @@ export default async function ProductPage({
 
             <div className="mt-8">
               <ProductDetailClient product={product} />
+            </div>
+
+            <div className="mt-12 border-t border-zinc-800 pt-8">
+              <h2 className="text-lg font-semibold text-white">Frequently asked questions</h2>
+              <dl className="mt-4 space-y-4">
+                {faqs.map((faq) => (
+                  <div key={faq.q} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                    <dt className="font-medium text-white">{faq.q}</dt>
+                    <dd className="mt-2 text-sm leading-relaxed text-zinc-400">{faq.a}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           </div>
         </div>

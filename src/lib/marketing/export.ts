@@ -1,8 +1,7 @@
-import { existsSync } from "fs";
-import { join } from "path";
 import { getHeroProducts, syncHeroProductPins } from "../hero-products";
 import { buildTikTokManualPost } from "./tiktok-content";
 import { getSiteUrl } from "../seo";
+import { videoFileExists, videoFilePath } from "./videos";
 
 export type MarketingExportProduct = {
   id: string;
@@ -13,6 +12,7 @@ export type MarketingExportProduct = {
   productUrl: string;
   productUrlTracked: string;
   videoUrl: string | null;
+  videoFilename: string;
   videoAvailable: boolean;
   caption: string;
   hashtags: string;
@@ -39,12 +39,16 @@ function trackedProductUrl(productUrl: string, slug: string, source = "youtube")
   return url.toString();
 }
 
-function videoPublicUrl(slug: string): { videoUrl: string | null; videoAvailable: boolean } {
+function videoPublicUrl(slug: string): {
+  videoUrl: string | null;
+  videoFilename: string;
+  videoAvailable: boolean;
+} {
   const filename = `${slug}-ad.mp4`;
-  const localPath = join(process.cwd(), "public/social/videos", filename);
-  const available = existsSync(localPath);
+  const available = videoFileExists(slug);
   return {
     videoAvailable: available,
+    videoFilename: filename,
     videoUrl: available ? `${getSiteUrl()}/social/videos/${filename}` : null,
   };
 }
@@ -64,7 +68,7 @@ export function getMarketingExport(limit = 6): MarketingExport {
 
   const products: MarketingExportProduct[] = heroes.map((h, index) => {
     const post = buildTikTokManualPost(h.product, index + 1);
-    const { videoUrl, videoAvailable } = videoPublicUrl(h.product.slug);
+    const { videoUrl, videoFilename, videoAvailable } = videoPublicUrl(h.product.slug);
     const primaryHook = post.hooks[0]?.openingText ?? post.title;
     const topicSlug = `buzzdrop-${h.product.slug}`;
 
@@ -87,6 +91,7 @@ export function getMarketingExport(limit = 6): MarketingExport {
       productUrl: post.productUrl,
       productUrlTracked: trackedProductUrl(post.productUrl, h.product.slug),
       videoUrl,
+      videoFilename,
       videoAvailable,
       caption: post.caption,
       hashtags: post.hashtags,

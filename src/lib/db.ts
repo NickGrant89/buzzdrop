@@ -23,6 +23,9 @@ export type Product = {
   view_count: number;
   is_pinned: number;
   hidden_reason: string | null;
+  seo_title: string;
+  seo_description: string;
+  seo_faqs: string;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -233,6 +236,15 @@ function migrateSchema(database: Database.Database) {
   }
   if (!productCols.includes("hidden_reason")) {
     database.exec("ALTER TABLE products ADD COLUMN hidden_reason TEXT");
+  }
+  if (!productCols.includes("seo_title")) {
+    database.exec("ALTER TABLE products ADD COLUMN seo_title TEXT NOT NULL DEFAULT ''");
+  }
+  if (!productCols.includes("seo_description")) {
+    database.exec("ALTER TABLE products ADD COLUMN seo_description TEXT NOT NULL DEFAULT ''");
+  }
+  if (!productCols.includes("seo_faqs")) {
+    database.exec("ALTER TABLE products ADD COLUMN seo_faqs TEXT NOT NULL DEFAULT ''");
   }
 
   database.exec(`

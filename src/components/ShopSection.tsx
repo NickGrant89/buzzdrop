@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { Product } from "@/lib/db";
-import { formatCategoryDisplay, getShopCategories } from "@/lib/categories";
+import { formatCategoryDisplay, getShopCategories, categorySlug } from "@/lib/categories";
 import { ProductCard } from "@/components/ProductCard";
 import { Sparkles } from "lucide-react";
 
@@ -39,6 +40,7 @@ export function ShopSection({ products, rawCategories }: ShopSectionProps) {
               <CategoryPill
                 key={cat}
                 label={cat}
+                href={`/category/${categorySlug(cat)}`}
                 active={active === cat}
                 onClick={() => setActive(cat)}
               />
@@ -81,23 +83,31 @@ export function ShopSection({ products, rawCategories }: ShopSectionProps) {
 
 function CategoryPill({
   label,
+  href,
   active,
   onClick,
 }: {
   label: string;
+  href?: string;
   active: boolean;
   onClick: () => void;
 }) {
+  const className = `shrink-0 rounded-full px-4 py-2 text-sm font-medium transition ${
+    active
+      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20"
+      : "border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+  }`;
+
+  if (href) {
+    return (
+      <Link href={href} className={className} onClick={onClick}>
+        {label}
+      </Link>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition ${
-        active
-          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20"
-          : "border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
-      }`}
-    >
+    <button type="button" onClick={onClick} className={className}>
       {label}
     </button>
   );

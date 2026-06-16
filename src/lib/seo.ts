@@ -34,6 +34,7 @@ export function buildPageMetadata({
   const pageTitle = title ? `${title} | ${siteName}` : `${siteName} — Viral Finds, Shipped Fast`;
   const pageDescription = description ?? defaultDescription;
   const ogImage = image ?? `${getSiteUrl()}/og-image.png`;
+  const googleVerification = process.env.GOOGLE_SITE_VERIFICATION?.trim();
 
   return {
     title: pageTitle,
@@ -43,6 +44,7 @@ export function buildPageMetadata({
     robots: noIndex
       ? { index: false, follow: false }
       : { index: true, follow: true, googleBot: { index: true, follow: true } },
+    ...(googleVerification ? { verification: { google: googleVerification } } : {}),
     openGraph: {
       type: "website",
       locale: siteConfig.locale,
@@ -80,6 +82,38 @@ export function productJsonLd(product: Product) {
       seller: { "@type": "Organization", name: "BuzzDrop" },
     },
   };
+}
+
+export function faqJsonLd(faqs: Array<{ q: string; a: string }>) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((faq) => ({
+      "@type": "Question",
+      name: faq.q,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.a,
+      },
+    })),
+  };
+}
+
+export function breadcrumbJsonLd(items: Array<{ name: string; path: string }>) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: `${getSiteUrl()}${item.path}`,
+    })),
+  };
+}
+
+export function categoryPageDescription(label: string, productCount: number): string {
+  return `Shop ${label.toLowerCase()} at BuzzDrop — ${productCount} trending ${productCount === 1 ? "find" : "finds"} with free UK delivery, secure checkout, and 14-day returns.`;
 }
 
 export function organizationJsonLd() {

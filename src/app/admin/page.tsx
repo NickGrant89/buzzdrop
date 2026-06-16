@@ -25,6 +25,7 @@ import {
   CreditCard,
   TrendingUp,
   Mail,
+  Search,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
@@ -220,7 +221,12 @@ type AdminData = {
     retailPrice: number;
     supplierSku: string;
     imageUrl: string;
+    seoTitle: string;
+    seoDescription: string;
+    seoFaqs: string;
+    productUrl: string;
   }>;
+  googleSearchConsole: { configured: boolean };
 };
 
 export default function AdminPage() {
@@ -241,6 +247,11 @@ export default function AdminPage() {
   const [manualQuantity, setManualQuantity] = useState("1");
   const [manualCountry, setManualCountry] = useState("US");
   const [manualPostcode, setManualPostcode] = useState("");
+  const [seoProductId, setSeoProductId] = useState("");
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDescription, setSeoDescription] = useState("");
+  const [seoFaqs, setSeoFaqs] = useState("");
+  const [savingSeo, setSavingSeo] = useState(false);
   const [manualShippingDetails, setManualShippingDetails] = useState("");
   const [shippingQuote, setShippingQuote] = useState<{
     productSubtotalGbp: number;
@@ -474,6 +485,47 @@ export default function AdminPage() {
     });
     await fetchData();
     setRestoringId(null);
+  }
+
+  function selectSeoProduct(productId: string) {
+    setSeoProductId(productId);
+    const product = data?.catalogProducts.find((p) => p.id === productId);
+    if (!product) {
+      setSeoTitle("");
+      setSeoDescription("");
+      setSeoFaqs("");
+      return;
+    }
+    setSeoTitle(product.seoTitle);
+    setSeoDescription(product.seoDescription);
+    setSeoFaqs(product.seoFaqs);
+  }
+
+  async function saveProductSeo() {
+    if (!seoProductId) {
+      setJobMessage({ ok: false, text: "Select a product first" });
+      return;
+    }
+    setSavingSeo(true);
+    setJobMessage(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_product_seo",
+        productId: seoProductId,
+        seoTitle,
+        seoDescription,
+        seoFaqs,
+      }),
+    });
+    const result = await res.json().catch(() => ({}));
+    setSavingSeo(false);
+    setJobMessage({
+      ok: result.success === true,
+      text: result.message ?? (result.success ? "SEO saved" : "Save failed"),
+    });
+    await fetchData();
   }
 
   async function createManualPaymentLink() {
@@ -751,6 +803,112 @@ export default function AdminPage() {
             )}
           </div>
         )}
+
+        {/* SEO */}
+        <div className="mb-8 rounded-2xl border border-sky-500/20 bg-sky-500/5 p-6">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                <Search className="h-5 w-5 text-sky-400" />
+                SEO
+              </h2>
+              <p className="text-sm text-zinc-400">
+                Custom Google titles, descriptions, and FAQs per product. Category pages live at{" "}
+                <code className="text-sky-300">/category/…</code>
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                data.googleSearchConsole?.configured
+                  ? "bg-emerald-500/10 text-emerald-400"
+                  : "bg-amber-500/10 text-amber-400"
+              }`}
+            >
+              Search Console tag: {data.googleSearchConsole?.configured ? "on" : "add GOOGLE_SITE_VERIFICATION"}
+            </span>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <label className="block text-sm text-zinc-400">
+              Product
+              <select
+                value={seoProductId}
+                onChange={(e) => selectSeoProduct(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
+              >
+                <option value="">Select product…</option>
+                {data.catalogProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {seoProductId && (
+              <div className="flex items-end">
+                <a
+                  href={data.catalogProducts.find((p) => p.id === seoProductId)?.productUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-sky-300 hover:text-sky-200"
+                >
+                  View live product →
+                </a>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-4">
+            <label className="block text-sm text-zinc-400">
+              SEO title
+              <input
+                value={seoTitle}
+                onChange={(e) => setSeoTitle(e.target.value)}
+                placeholder="LED Message Board Night Light — USB Desk Lamp UK"
+                className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
+              />
+              <span className="mt-1 block text-xs text-zinc-600">
+                Leave blank to use the product title. Shown in Google results.
+              </span>
+            </label>
+
+            <label className="block text-sm text-zinc-400">
+              Meta description
+              <textarea
+                value={seoDescription}
+                onChange={(e) => setSeoDescription(e.target.value)}
+                rows={3}
+                placeholder="Shop the viral LED note board night light with free UK delivery, secure checkout, and 14-day returns."
+                className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"
+              />
+            </label>
+
+            <label className="block text-sm text-zinc-400">
+              FAQs (JSON — optional)
+              <textarea
+                value={seoFaqs}
+                onChange={(e) => setSeoFaqs(e.target.value)}
+                rows={5}
+                placeholder='[{"q":"How long is delivery?","a":"Free UK delivery in 5–15 working days."}]'
+                className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-white"
+              />
+              <span className="mt-1 block text-xs text-zinc-600">
+                Leave blank for default FAQs (delivery, returns, stock). Powers FAQ rich results.
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={saveProductSeo}
+            disabled={savingSeo || !seoProductId}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+          >
+            {savingSeo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Save SEO
+          </button>
+        </div>
 
         {/* CJ Dropshipping connection */}
         <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">

@@ -21,6 +21,7 @@ import { createManualPayment, listPendingManualPayments } from "@/lib/manual-pay
 import { quoteManualOrderShipping } from "@/lib/manual-shipping";
 import { getActiveProducts } from "@/lib/products";
 import { getSiteUrl } from "@/lib/seo";
+import { updateProductSeo } from "@/lib/product-seo";
 
 export async function GET() {
   const stats = getStoreStats();
@@ -168,7 +169,14 @@ export async function GET() {
       retailPrice: p.retail_price,
       supplierSku: p.supplier_sku,
       imageUrl: p.image_url,
+      seoTitle: p.seo_title ?? "",
+      seoDescription: p.seo_description ?? "",
+      seoFaqs: p.seo_faqs ?? "",
+      productUrl: `${getSiteUrl()}/product/${p.slug}`,
     })),
+    googleSearchConsole: {
+      configured: Boolean(process.env.GOOGLE_SITE_VERIFICATION?.trim()),
+    },
     metaPixel: {
       configured: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()),
     },
@@ -259,6 +267,21 @@ export async function POST(request: Request) {
     }
     const result = restoreProduct(productId);
     return NextResponse.json({ success: result.ok, message: result.message });
+  }
+
+  if (body.action === "update_product_seo") {
+    const productId = typeof body.productId === "string" ? body.productId.trim() : "";
+    if (!productId) {
+      return NextResponse.json({ success: false, message: "Missing productId" }, { status: 400 });
+    }
+
+    const result = updateProductSeo(productId, {
+      seoTitle: typeof body.seoTitle === "string" ? body.seoTitle : "",
+      seoDescription: typeof body.seoDescription === "string" ? body.seoDescription : "",
+      seoFaqs: typeof body.seoFaqs === "string" ? body.seoFaqs : "",
+    });
+
+    return NextResponse.json({ success: result.ok, message: result.message }, { status: result.ok ? 200 : 400 });
   }
 
   if (body.action === "quote_manual_shipping") {

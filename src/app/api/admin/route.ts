@@ -16,6 +16,7 @@ import { testTikTokShopConnection, isTikTokShopConfigured } from "@/lib/tiktok-s
 import { trendDiscoveryConfig } from "@/lib/config/trend-discovery";
 import { automationScheduleLabels } from "@/lib/automation/schedule-labels";
 import { buildTikTokManualPosts } from "@/lib/marketing/tiktok-content";
+import { getMarketingDashboard } from "@/lib/marketing/dashboard";
 import { createManualPayment, listPendingManualPayments } from "@/lib/manual-payments";
 import { quoteManualOrderShipping } from "@/lib/manual-shipping";
 import { getActiveProducts } from "@/lib/products";
@@ -122,6 +123,7 @@ export async function GET() {
 
   return NextResponse.json({
     stats: { ...stats, hiddenProductCount: getHiddenProductCount() },
+    marketing: getMarketingDashboard(),
     logs,
     automationEnabled,
     socialPostingEnabled,
@@ -191,6 +193,7 @@ export async function GET() {
       fulfillment: automationScheduleLabels.fulfillment,
       social: automationScheduleLabels.social,
       catalogPrune: automationScheduleLabels.catalogPrune,
+      abandonedCartEmails: automationScheduleLabels.abandonedCartEmails,
       syncLimit: trendDiscoveryConfig.syncLimit,
       pruneAfterDays: trendDiscoveryConfig.pruneAfterDays,
       catalogMaxActive: trendDiscoveryConfig.catalogMaxActive,
@@ -221,7 +224,15 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "run_job") {
-    const job = body.job as "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop" | "prune";
+    const job = body.job as
+      | "sync"
+      | "pricing"
+      | "fulfillment"
+      | "tidy"
+      | "social"
+      | "tiktok_shop"
+      | "prune"
+      | "abandoned_emails";
     const result = await runJobManually(job);
     return NextResponse.json(result);
   }

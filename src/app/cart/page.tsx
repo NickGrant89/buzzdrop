@@ -7,7 +7,7 @@ import { StoreLayout } from "@/components/StoreLayout";
 import { CheckoutButton } from "@/components/AddToCartButton";
 import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 export default function CartPage() {
@@ -24,6 +24,7 @@ export default function CartPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [stripeEnabled, setStripeEnabled] = useState(false);
+  const capturedEmailRef = useRef("");
 
   useEffect(() => {
     fetch("/api/checkout/status")
@@ -31,6 +32,26 @@ export default function CartPage() {
       .then((data) => setStripeEnabled(data.configured === true))
       .catch(() => setStripeEnabled(false));
   }, []);
+
+  async function captureCartEmail(rawEmail: string) {
+    const normalized = rawEmail.trim().toLowerCase();
+    if (!normalized.includes("@") || items.length === 0) return;
+    if (capturedEmailRef.current === normalized) return;
+
+    capturedEmailRef.current = normalized;
+    try {
+      await fetch("/api/cart/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalized,
+          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        }),
+      });
+    } catch {
+      capturedEmailRef.current = "";
+    }
+  }
 
   async function handleCheckout() {
     if (!email || !name || !phone || !line1 || !city || !postcode) {
@@ -182,6 +203,7 @@ export default function CartPage() {
                     placeholder="Email *"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={(e) => void captureCartEmail(e.target.value)}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none"
                   />
                   <input

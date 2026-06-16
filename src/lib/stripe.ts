@@ -4,6 +4,12 @@ import { getProductById } from "./products";
 import { storeConfig } from "./config";
 import { v4 as uuidv4 } from "uuid";
 import type { UkCheckoutDetails } from "./automation/fulfillment";
+import {
+  sendMetaCapiEvent,
+  splitName,
+  type MetaCapiUserData,
+} from "./meta-capi";
+import { markCartLeadConverted } from "./marketing/abandoned-cart";
 
 export function isStripeConfigured(): boolean {
   const secret = process.env.STRIPE_SECRET_KEY ?? "";
@@ -85,13 +91,53 @@ function insertPendingOrder(
   }
 }
 
-function finalizePaidOrder(orderId: string): string | null {
+async function notifyOrderPaid(orderId: string, userData?: MetaCapiUserData) {
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as
+    | {
+        customer_email: string;
+        customer_name: string;
+        shipping_phone: string;
+        shipping_postcode: string;
+        total: number;
+      }
+    | undefined;
+
+  if (!order) return;
+
+  markCartLeadConverted(order.customer_email);
+
+  const items = db
+    .prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?")
+    .all(orderId) as Array<{ product_id: string; quantity: number }>;
+
+  const nameParts = splitName(order.customer_name);
+  await sendMetaCapiEvent("Purchase", {
+    eventId: `purchase_${orderId}`,
+    userData: {
+      email: order.customer_email,
+      phone: order.shipping_phone,
+      postcode: order.shipping_postcode,
+      country: "gb",
+      ...nameParts,
+      ...userData,
+    },
+    customData: {
+      value: order.total,
+      currency: storeConfig.currency,
+      contentIds: items.map((i) => i.product_id),
+      numItems: items.reduce((n, i) => n + i.quantity, 0),
+      orderId,
+    },
+  });
+}
+
+function finalizePaidOrder(orderId: string): { orderId: string | null; newlyPaid: boolean } {
   const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as
     | { status: string }
     | undefined;
 
-  if (!order) return null;
-  if (order.status === "paid") return orderId;
+  if (!order) return { orderId: null, newlyPaid: false };
+  if (order.status === "paid") return { orderId, newlyPaid: false };
 
   db.prepare(`
     UPDATE orders SET status = 'paid', updated_at = ? WHERE id = ?
@@ -101,21 +147,19 @@ function finalizePaidOrder(orderId: string): string | null {
     .prepare("SELECT * FROM order_items WHERE order_id = ?")
     .all(orderId) as Array<{ product_id: string; quantity: number }>;
 
-  if (items.length === 0) {
-    return orderId;
+  if (items.length > 0) {
+    const transaction = db.transaction(() => {
+      for (const item of items) {
+        db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(
+          item.quantity,
+          item.product_id
+        );
+      }
+    });
+    transaction();
   }
 
-  const transaction = db.transaction(() => {
-    for (const item of items) {
-      db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(
-        item.quantity,
-        item.product_id
-      );
-    }
-  });
-  transaction();
-
-  return orderId;
+  return { orderId, newlyPaid: true };
 }
 
 export async function createOrderPayment(items: CheckoutItem[], details: UkCheckoutDetails) {
@@ -184,7 +228,8 @@ export async function createOrderPayment(items: CheckoutItem[], details: UkCheck
 }
 
 export async function handlePaymentIntentComplete(
-  paymentIntentId: string
+  paymentIntentId: string,
+  userData?: MetaCapiUserData
 ): Promise<string | null> {
   const stripe = getStripe();
   if (!stripe) return null;
@@ -195,7 +240,11 @@ export async function handlePaymentIntentComplete(
   const orderId = paymentIntent.metadata?.order_id;
   if (!orderId) return null;
 
-  return finalizePaidOrder(orderId);
+  const { orderId: finalizedId, newlyPaid } = finalizePaidOrder(orderId);
+  if (newlyPaid && finalizedId) {
+    await notifyOrderPaid(finalizedId, userData);
+  }
+  return finalizedId;
 }
 
 export async function createManualPaymentCheckout(
@@ -287,7 +336,10 @@ export async function createManualPaymentCheckout(
   return { demo: false, url: session.url, orderId };
 }
 
-export async function handleCheckoutComplete(sessionId: string): Promise<string | null> {
+export async function handleCheckoutComplete(
+  sessionId: string,
+  userData?: MetaCapiUserData
+): Promise<string | null> {
   const stripe = getStripe();
   if (!stripe) return null;
 
@@ -297,7 +349,11 @@ export async function handleCheckoutComplete(sessionId: string): Promise<string 
   const orderId = session.metadata?.order_id;
   if (!orderId) return null;
 
-  return finalizePaidOrder(orderId);
+  const { orderId: finalizedId, newlyPaid } = finalizePaidOrder(orderId);
+  if (newlyPaid && finalizedId) {
+    await notifyOrderPaid(finalizedId, userData);
+  }
+  return finalizedId;
 }
 
 export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<void> {

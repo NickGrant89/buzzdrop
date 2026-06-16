@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createOrderPayment } from "@/lib/stripe";
 import { createDemoOrder } from "@/lib/automation/fulfillment";
+import {
+  getClientIp,
+  parseMetaCookies,
+  sendMetaCapiEvent,
+  splitName,
+} from "@/lib/meta-capi";
+import { markCartLeadConverted } from "@/lib/marketing/abandoned-cart";
+import { getSiteUrl } from "@/lib/seo";
 
 const checkoutSchema = z.object({
   items: z.array(
@@ -52,6 +60,33 @@ export async function POST(request: Request) {
         url: `${appUrl}/order/success?order_id=${orderId}&demo=true`,
       });
     }
+
+    markCartLeadConverted(details.email);
+
+    const metaCookies = parseMetaCookies(request.headers.get("cookie"));
+    const nameParts = splitName(details.name);
+    await sendMetaCapiEvent("InitiateCheckout", {
+      eventId: `ic_${result.orderId}`,
+      eventSourceUrl: `${getSiteUrl()}/checkout`,
+      userData: {
+        email: details.email,
+        phone: details.phone,
+        postcode: details.postcode,
+        country: "gb",
+        ip: getClientIp(request),
+        userAgent: request.headers.get("user-agent") ?? undefined,
+        fbp: metaCookies.fbp,
+        fbc: metaCookies.fbc,
+        ...nameParts,
+      },
+      customData: {
+        value: result.total,
+        currency: "GBP",
+        contentIds: parsed.items.map((i) => i.productId),
+        numItems: parsed.items.reduce((n, i) => n + i.quantity, 0),
+        orderId: result.orderId,
+      },
+    });
 
     return NextResponse.json({
       clientSecret: result.clientSecret,

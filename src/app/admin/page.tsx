@@ -23,6 +23,8 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard,
+  TrendingUp,
+  Mail,
 } from "lucide-react";
 import { StoreLayout } from "@/components/StoreLayout";
 import { formatPrice } from "@/lib/utils";
@@ -88,6 +90,7 @@ type AdminData = {
     fulfillment: string;
     social: string;
     catalogPrune: string;
+    abandonedCartEmails: string;
     syncLimit: number;
     pruneAfterDays: number;
     catalogMaxActive: number;
@@ -121,6 +124,53 @@ type AdminData = {
     adUrlTikTok: string;
   }>;
   metaPixel: { configured: boolean };
+  marketing: {
+    funnel: {
+      productViews: number;
+      checkoutsStarted: number;
+      ordersPaid: number;
+      viewToCheckoutRate: number;
+      checkoutToPaidRate: number;
+      viewToPaidRate: number;
+    };
+    revenue: {
+      totalGbp: number;
+      paidOrders: number;
+      averageOrderValue: number;
+      pendingCheckouts: number;
+    };
+    abandonedCart: {
+      pendingOver1h: number;
+      remindersSent: number;
+      emailConfigured: boolean;
+    };
+    integrations: {
+      metaPixel: boolean;
+      metaCapi: boolean;
+      resendEmail: boolean;
+    };
+    topProducts: Array<{
+      id: string;
+      title: string;
+      slug: string;
+      views: number;
+      orders: number;
+      conversionRate: number;
+      retailPrice: number;
+    }>;
+    heroAlerts: Array<{
+      title: string;
+      views: number;
+      orders: number;
+      slug: string;
+    }>;
+    recentPaidOrders: Array<{
+      id: string;
+      email: string;
+      total: number;
+      createdAt: string;
+    }>;
+  };
   hiddenProducts: Array<{
     id: string;
     slug: string;
@@ -324,7 +374,16 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  async function runJob(job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop") {
+  async function runJob(
+    job:
+      | "sync"
+      | "pricing"
+      | "fulfillment"
+      | "tidy"
+      | "social"
+      | "tiktok_shop"
+      | "abandoned_emails"
+  ) {
     setRunningJob(job);
     setJobMessage(null);
     const res = await fetch("/api/admin", {
@@ -497,6 +556,7 @@ export default function AdminPage() {
   const jobs = [
     { id: "sync" as const, label: "Sync Trending Products", icon: RefreshCw, desc: "Import viral products" },
     { id: "social" as const, label: "Post to Social", icon: Megaphone, desc: "Share next trending product" },
+    { id: "abandoned_emails" as const, label: "Send Cart Reminders", icon: Mail, desc: "1h & 24h abandoned checkout emails" },
     { id: "tiktok_shop" as const, label: "Sync TikTok Shop", icon: RefreshCw, desc: "Push products to TikTok Shop" },
     { id: "tidy" as const, label: "Tidy Product Catalog", icon: Sparkles, desc: "Clean titles, categories & hide demos" },
     { id: "pricing" as const, label: "Update Prices & Stock", icon: DollarSign, desc: "Recalculate margins" },
@@ -545,6 +605,150 @@ export default function AdminPage() {
             }`}
           >
             {jobMessage.text}
+          </div>
+        )}
+
+        {/* Marketing dashboard */}
+        {data.marketing && (
+          <div className="mb-8 rounded-2xl border border-violet-500/20 bg-violet-500/5 p-6">
+            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                  <TrendingUp className="h-5 w-5 text-violet-400" />
+                  Marketing
+                </h2>
+                <p className="text-sm text-zinc-400">
+                  Funnel from ad clicks to checkout — server-side Meta CAPI + abandoned cart recovery
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {(
+                  [
+                    ["Meta Pixel", data.marketing.integrations.metaPixel],
+                    ["Meta CAPI", data.marketing.integrations.metaCapi],
+                    ["Resend email", data.marketing.integrations.resendEmail],
+                  ] as const
+                ).map(([label, ok]) => (
+                  <span
+                    key={label}
+                    className={`rounded-full px-3 py-1 font-medium ${
+                      ok
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-amber-500/10 text-amber-400"
+                    }`}
+                  >
+                    {label}: {ok ? "on" : "setup needed"}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: "Product views", value: data.marketing.funnel.productViews },
+                { label: "Checkouts started", value: data.marketing.funnel.checkoutsStarted },
+                { label: "Paid orders", value: data.marketing.funnel.ordersPaid },
+                { label: "Revenue", value: formatPrice(data.marketing.revenue.totalGbp) },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                  <p className="text-xs text-zinc-500">{label}</p>
+                  <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-6 grid gap-4 sm:grid-cols-3">
+              {[
+                { label: "View → checkout", value: `${data.marketing.funnel.viewToCheckoutRate}%` },
+                { label: "Checkout → paid", value: `${data.marketing.funnel.checkoutToPaidRate}%` },
+                { label: "View → paid", value: `${data.marketing.funnel.viewToPaidRate}%` },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3">
+                  <p className="text-xs text-zinc-500">{label}</p>
+                  <p className="text-lg font-semibold text-violet-300">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-6 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <p className="text-xs text-zinc-500">Pending checkouts</p>
+                <p className="mt-1 text-xl font-bold text-white">
+                  {data.marketing.revenue.pendingCheckouts}
+                </p>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <p className="text-xs text-zinc-500">Abandoned &gt; 1h</p>
+                <p className="mt-1 text-xl font-bold text-amber-300">
+                  {data.marketing.abandonedCart.pendingOver1h}
+                </p>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <p className="text-xs text-zinc-500">Reminders sent</p>
+                <p className="mt-1 text-xl font-bold text-white">
+                  {data.marketing.abandonedCart.remindersSent}
+                </p>
+              </div>
+            </div>
+
+            {data.marketing.heroAlerts.length > 0 && (
+              <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <p className="text-sm font-medium text-amber-200">High traffic, no sales yet</p>
+                <ul className="mt-2 space-y-1 text-sm text-zinc-300">
+                  {data.marketing.heroAlerts.map((p) => (
+                    <li key={p.slug}>
+                      {p.title} — {p.views} views, {p.orders} orders
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(!data.marketing.integrations.metaCapi ||
+              !data.marketing.integrations.resendEmail) && (
+              <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 text-sm text-zinc-400">
+                <p className="font-medium text-zinc-300">Railway env vars to finish setup</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {!data.marketing.integrations.metaCapi && (
+                    <li>
+                      <code className="text-violet-300">META_CAPI_ACCESS_TOKEN</code> — Events Manager →
+                      Pixel → Conversions API
+                    </li>
+                  )}
+                  {!data.marketing.integrations.resendEmail && (
+                    <li>
+                      <code className="text-violet-300">RESEND_API_KEY</code> +{" "}
+                      <code className="text-violet-300">EMAIL_FROM</code> — resend.com
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {data.marketing.topProducts.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                      <th className="pb-2 pr-4 font-medium">Product</th>
+                      <th className="pb-2 pr-4 font-medium">Views</th>
+                      <th className="pb-2 pr-4 font-medium">Orders</th>
+                      <th className="pb-2 font-medium">Conv.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.marketing.topProducts.map((p) => (
+                      <tr key={p.id} className="border-b border-zinc-800/50">
+                        <td className="py-2 pr-4 text-white">{p.title}</td>
+                        <td className="py-2 pr-4 text-zinc-400">{p.views}</td>
+                        <td className="py-2 pr-4 text-zinc-400">{p.orders}</td>
+                        <td className="py-2 text-violet-300">{p.conversionRate}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -1095,6 +1299,7 @@ export default function AdminPage() {
                   { label: "Price & stock update", schedule: data.automation.priceStock, icon: DollarSign },
                   { label: "Order fulfillment", schedule: data.automation.fulfillment, icon: Truck },
                   { label: "Social marketing", schedule: data.automation.social, icon: Megaphone },
+                  { label: "Abandoned cart emails", schedule: data.automation.abandonedCartEmails, icon: Mail },
                   { label: "Catalog prune", schedule: data.automation.catalogPrune, icon: Sparkles },
                 ] as const
               ).map(({ label, schedule, icon: Icon }) => (

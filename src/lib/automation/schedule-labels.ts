@@ -15,4 +15,5 @@ export const automationScheduleLabels = {
   social: "10:00 & 18:00 daily",
   catalogPrune: "Daily at 05:00",
   tiktokShop: "Daily at 04:00",
+  abandonedCartEmails: "Hourly",
 };

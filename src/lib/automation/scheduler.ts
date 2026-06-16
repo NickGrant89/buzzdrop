@@ -7,6 +7,7 @@ import { logAutomation } from "./logger";
 import { getSetting, setSetting } from "../db";
 import { trendDiscoveryConfig } from "../config/trend-discovery";
 import { pruneLowPerformingProductsWithLog } from "./catalog-prune";
+import { sendAbandonedCheckoutEmails } from "../marketing/abandoned-cart";
 
 let started = false;
 
@@ -59,6 +60,21 @@ async function runTikTokShopSync() {
   }
 }
 
+async function runAbandonedCartEmails() {
+  try {
+    const result = await sendAbandonedCheckoutEmails();
+    if (result.sent > 0 || result.errors > 0) {
+      await logAutomation(
+        "abandoned_cart_email",
+        result.errors > 0 ? "error" : "success",
+        `Abandoned cart batch: ${result.sent} sent${result.errors ? `, ${result.errors} failed` : ""}`
+      );
+    }
+  } catch (err) {
+    await logAutomation("abandoned_cart_email", "error", String(err));
+  }
+}
+
 export function startAutomationScheduler() {
   if (started) return;
 
@@ -84,6 +100,7 @@ export function startAutomationScheduler() {
   cron.schedule("0 18 * * *", runSocialPostJob, { timezone: tz });
   cron.schedule("0 4 * * *", runTikTokShopSync);
   cron.schedule("0 5 * * *", runCatalogPrune);
+  cron.schedule("0 * * * *", runAbandonedCartEmails);
 
   setSetting("scheduler_started_at", new Date().toISOString());
   console.log("[BuzzDrop] Automation scheduler started");
@@ -93,12 +110,21 @@ export function startAutomationScheduler() {
   console.log("  - Order fulfillment: every 5 minutes");
   console.log(`  - Social marketing: 10:00 & 18:00 daily (${tz})`);
   console.log("  - TikTok Shop sync: 04:00 daily");
+  console.log("  - Abandoned cart emails: hourly");
 
   setTimeout(() => void runProductSync(), 10_000);
 }
 
 export async function runJobManually(
-  job: "sync" | "pricing" | "fulfillment" | "tidy" | "social" | "tiktok_shop" | "prune"
+  job:
+    | "sync"
+    | "pricing"
+    | "fulfillment"
+    | "tidy"
+    | "social"
+    | "tiktok_shop"
+    | "prune"
+    | "abandoned_emails"
 ): Promise<{ success: boolean; message: string }> {
   try {
     switch (job) {
@@ -149,6 +175,16 @@ export async function runJobManually(
           message: `TikTok Shop: ${result.created} created, ${result.skipped} skipped${
             result.errors.length ? `, ${result.errors.length} errors` : ""
           }`,
+        };
+      }
+      case "abandoned_emails": {
+        const result = await sendAbandonedCheckoutEmails();
+        if (!process.env.RESEND_API_KEY?.trim()) {
+          return { success: false, message: "Add RESEND_API_KEY to send abandoned cart emails" };
+        }
+        return {
+          success: result.errors === 0,
+          message: `Abandoned cart: ${result.sent} sent${result.errors ? `, ${result.errors} failed` : ""}`,
         };
       }
     }

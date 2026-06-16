@@ -269,6 +269,25 @@ function migrateSchema(database: Database.Database) {
   if (!orderCols.includes("manual_notes")) {
     database.exec("ALTER TABLE orders ADD COLUMN manual_notes TEXT NOT NULL DEFAULT ''");
   }
+  if (!orderCols.includes("abandoned_reminder_1_at")) {
+    database.exec("ALTER TABLE orders ADD COLUMN abandoned_reminder_1_at TEXT");
+  }
+  if (!orderCols.includes("abandoned_reminder_2_at")) {
+    database.exec("ALTER TABLE orders ADD COLUMN abandoned_reminder_2_at TEXT");
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS cart_leads (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      cart_json TEXT NOT NULL,
+      reminder_sent_at TEXT,
+      converted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_cart_leads_email ON cart_leads(email);
+  `);
 }
 
 let dbInstance: Database.Database | null = null;

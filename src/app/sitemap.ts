@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 import { getActiveProducts } from "@/lib/products";
 import { getSiteUrl } from "@/lib/seo";
 
+/** Build-time DB is empty on Railway — must generate at request time. */
+export const dynamic = "force-dynamic";
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = getSiteUrl();
   const now = new Date();

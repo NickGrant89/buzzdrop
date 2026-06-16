@@ -20,6 +20,32 @@ export function isMetaPixelEnabled(): boolean {
   return getMetaPixelId().length > 0;
 }
 
+export function createMetaEventId(prefix: string): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+export function getFbclidFromLocation(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return new URL(window.location.href).searchParams.get("fbclid") ?? undefined;
+}
+
+function syncMetaCapiEvent(payload: {
+  eventName: "PageView" | "ViewContent";
+  eventId: string;
+  eventSourceUrl: string;
+  fbclid?: string;
+  productId?: string;
+}) {
+  fetch("/api/meta/event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
 export function trackMetaEvent(
   event: string,
   params?: Record<string, unknown>,
@@ -35,21 +61,38 @@ export function trackMetaEvent(
 
 export function trackPageView() {
   if (typeof window === "undefined" || !window.fbq) return;
-  window.fbq("track", "PageView");
+
+  const eventId = createMetaEventId("pv");
+  const eventSourceUrl = window.location.href;
+
+  trackMetaEvent("PageView", {}, { eventID: eventId });
+  syncMetaCapiEvent({
+    eventName: "PageView",
+    eventId,
+    eventSourceUrl,
+    fbclid: getFbclidFromLocation(),
+  });
 }
 
-export function trackViewContent(product: {
-  id: string;
-  title: string;
-  retail_price: number;
-}) {
-  trackMetaEvent("ViewContent", {
-    content_ids: [product.id],
-    content_name: product.title,
-    content_type: "product",
-    value: product.retail_price,
-    currency: "GBP",
-  });
+export function trackViewContent(
+  product: {
+    id: string;
+    title: string;
+    retail_price: number;
+  },
+  eventId: string
+) {
+  trackMetaEvent(
+    "ViewContent",
+    {
+      content_ids: [product.id],
+      content_name: product.title,
+      content_type: "product",
+      value: product.retail_price,
+      currency: "GBP",
+    },
+    { eventID: eventId }
+  );
 }
 
 export function trackInitiateCheckout(payload: {

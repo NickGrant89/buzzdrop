@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { getSiteUrl } from "./seo";
 
-export type MetaCapiEventName = "ViewContent" | "InitiateCheckout" | "Purchase";
+export type MetaCapiEventName = "PageView" | "ViewContent" | "InitiateCheckout" | "Purchase";
 
 export type MetaCapiUserData = {
   email?: string;
@@ -63,7 +63,7 @@ export function parseMetaCookies(cookieHeader: string | null): { fbp?: string; f
   const cookies = Object.fromEntries(
     cookieHeader.split(";").map((part) => {
       const [key, ...rest] = part.trim().split("=");
-      return [key, rest.join("=")];
+      return [key, decodeURIComponent(rest.join("="))];
     })
   );
 
@@ -73,12 +73,131 @@ export function parseMetaCookies(cookieHeader: string | null): { fbp?: string; f
   };
 }
 
+function parseIpCandidate(raw: string): string | undefined {
+  let value = raw.trim().replace(/^"|"$/g, "");
+  if (!value) return undefined;
+
+  if (value.startsWith("[")) {
+    const end = value.indexOf("]");
+    if (end > 0) return value.slice(1, end);
+  }
+
+  if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(value)) {
+    return value.split(":")[0];
+  }
+
+  return value;
+}
+
+function isPrivateOrLocalIp(ip: string): boolean {
+  if (ip === "::1" || ip === "127.0.0.1") return true;
+  if (ip.startsWith("fe80:") || ip.startsWith("fc") || ip.startsWith("fd")) return true;
+
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!v4) return false;
+
+  const [a, b] = [Number(v4[1]), Number(v4[2])];
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+function isIpv6(ip: string): boolean {
+  return ip.includes(":");
+}
+
+function extractIpsFromHeader(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => parseIpCandidate(part.trim()))
+    .filter((ip): ip is string => Boolean(ip));
+}
+
+function pickBestClientIp(candidates: string[]): string | undefined {
+  const publicIps = candidates.filter((ip) => !isPrivateOrLocalIp(ip));
+  if (publicIps.length === 0) return undefined;
+
+  const ipv6 = publicIps.find(isIpv6);
+  if (ipv6) return ipv6;
+
+  return publicIps[0];
+}
+
 export function getClientIp(request: Request): string | undefined {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    undefined
-  );
+  const headerNames = [
+    "cf-connecting-ip",
+    "true-client-ip",
+    "x-real-ip",
+    "x-vercel-forwarded-for",
+    "x-forwarded-for",
+  ];
+
+  for (const name of headerNames) {
+    const value = request.headers.get(name);
+    if (!value) continue;
+    const picked = pickBestClientIp(extractIpsFromHeader(value));
+    if (picked) return picked;
+  }
+
+  const forwarded = request.headers.get("forwarded");
+  if (forwarded) {
+    const candidates: string[] = [];
+    for (const part of forwarded.split(",")) {
+      const match = part.match(/for=(?:"\[([^"]+)\]"|"([^"]+)"|([^;\s]+))/i);
+      if (match) {
+        const ip = parseIpCandidate(match[1] || match[2] || match[3]);
+        if (ip) candidates.push(ip);
+      }
+    }
+    const picked = pickBestClientIp(candidates);
+    if (picked) return picked;
+  }
+
+  return undefined;
+}
+
+export function extractFbclid(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).searchParams.get("fbclid") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveFbc(
+  cookieHeader: string | null,
+  options?: { fbclid?: string; eventSourceUrl?: string }
+): string | undefined {
+  const { fbc } = parseMetaCookies(cookieHeader);
+  if (fbc) return fbc;
+
+  const fbclid = options?.fbclid || extractFbclid(options?.eventSourceUrl);
+  if (!fbclid) return undefined;
+
+  return `fb.1.${Date.now()}.${fbclid}`;
+}
+
+export function buildMetaUserDataFromRequest(
+  request: Request,
+  extra?: Omit<MetaCapiUserData, "ip" | "userAgent" | "fbp" | "fbc"> & {
+    fbclid?: string;
+    eventSourceUrl?: string;
+  }
+): MetaCapiUserData {
+  const metaCookies = parseMetaCookies(request.headers.get("cookie"));
+  const { fbclid, eventSourceUrl, ...rest } = extra ?? {};
+
+  return {
+    ip: getClientIp(request),
+    userAgent: request.headers.get("user-agent") ?? undefined,
+    fbp: metaCookies.fbp,
+    fbc: resolveFbc(request.headers.get("cookie"), { fbclid, eventSourceUrl }),
+    ...rest,
+  };
 }
 
 export function isMetaCapiConfigured(): boolean {
@@ -122,7 +241,7 @@ export async function sendMetaCapiEvent(
         action_source: "website",
         event_source_url: options.eventSourceUrl ?? getSiteUrl(),
         user_data: options.userData ? hashUserData(options.userData) : {},
-        custom_data: customData,
+        custom_data: Object.keys(customData).length > 0 ? customData : undefined,
       },
     ],
     access_token: accessToken,

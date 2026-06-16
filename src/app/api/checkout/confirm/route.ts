@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handleCheckoutComplete, handlePaymentIntentComplete } from "@/lib/stripe";
-import { getClientIp, parseMetaCookies } from "@/lib/meta-capi";
+import { buildMetaUserDataFromRequest } from "@/lib/meta-capi";
 
 const bodySchema = z
   .object({
@@ -13,13 +13,7 @@ const bodySchema = z
   });
 
 function metaUserFromRequest(request: Request) {
-  const metaCookies = parseMetaCookies(request.headers.get("cookie"));
-  return {
-    ip: getClientIp(request),
-    userAgent: request.headers.get("user-agent") ?? undefined,
-    fbp: metaCookies.fbp,
-    fbc: metaCookies.fbc,
-  };
+  return buildMetaUserDataFromRequest(request, { country: "gb" });
 }
 
 /** Called from the order success page after Stripe redirects back. */

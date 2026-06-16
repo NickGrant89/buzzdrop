@@ -5,19 +5,29 @@ import type { Product } from "@/lib/db";
 import { useCart } from "@/context/CartContext";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { Minus, Plus } from "lucide-react";
-import { trackViewContent } from "@/lib/meta-pixel";
+import { trackViewContent, createMetaEventId, getFbclidFromLocation } from "@/lib/meta-pixel";
 
 export function ProductDetailClient({ product }: { product: Product }) {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
+    const eventId = createMetaEventId("vc");
+    const eventSourceUrl = window.location.href;
+    const fbclid = getFbclidFromLocation();
+
+    trackViewContent(product, eventId);
+
     fetch("/api/products/view", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId: product.id }),
+      body: JSON.stringify({
+        productId: product.id,
+        eventId,
+        eventSourceUrl,
+        fbclid,
+      }),
     }).catch(() => {});
-    trackViewContent(product);
   }, [product]);
 
   return (

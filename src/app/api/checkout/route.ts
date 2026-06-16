@@ -3,8 +3,7 @@ import { z } from "zod";
 import { createOrderPayment } from "@/lib/stripe";
 import { createDemoOrder } from "@/lib/automation/fulfillment";
 import {
-  getClientIp,
-  parseMetaCookies,
+  buildMetaUserDataFromRequest,
   sendMetaCapiEvent,
   splitName,
 } from "@/lib/meta-capi";
@@ -63,22 +62,17 @@ export async function POST(request: Request) {
 
     markCartLeadConverted(details.email);
 
-    const metaCookies = parseMetaCookies(request.headers.get("cookie"));
     const nameParts = splitName(details.name);
     await sendMetaCapiEvent("InitiateCheckout", {
       eventId: `ic_${result.orderId}`,
       eventSourceUrl: `${getSiteUrl()}/checkout`,
-      userData: {
+      userData: buildMetaUserDataFromRequest(request, {
         email: details.email,
         phone: details.phone,
         postcode: details.postcode,
         country: "gb",
-        ip: getClientIp(request),
-        userAgent: request.headers.get("user-agent") ?? undefined,
-        fbp: metaCookies.fbp,
-        fbc: metaCookies.fbc,
         ...nameParts,
-      },
+      }),
       customData: {
         value: result.total,
         currency: "GBP",

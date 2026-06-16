@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Header } from "@/components/Header";
+import { FooterSocialLinks } from "@/components/FooterSocialLinks";
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               <p className="mt-2 text-sm leading-relaxed text-zinc-500">
                 Viral products, delivered across the UK. Free shipping on every order.
               </p>
+              <FooterSocialLinks />
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Shop</p>

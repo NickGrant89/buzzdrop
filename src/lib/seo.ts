@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { Product } from "./db";
+import { getSocialLinks } from "./social-links";
 
 const siteName = "BuzzDrop";
 const defaultDescription =
@@ -82,12 +83,15 @@ export function productJsonLd(product: Product) {
 }
 
 export function organizationJsonLd() {
+  const social = getSocialLinks().map((link) => link.href);
+
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "BuzzDrop",
     url: getSiteUrl(),
     logo: `${getSiteUrl()}/icon.svg`,
+    sameAs: social,
     contactPoint: {
       "@type": "ContactPoint",
       email: "support@buzzdrop.co.uk",

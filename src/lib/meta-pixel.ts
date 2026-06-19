@@ -33,11 +33,12 @@ export function getFbclidFromLocation(): string | undefined {
 }
 
 function syncMetaCapiEvent(payload: {
-  eventName: "PageView" | "ViewContent";
+  eventName: "PageView" | "ViewContent" | "AddToCart";
   eventId: string;
   eventSourceUrl: string;
   fbclid?: string;
   productId?: string;
+  quantity?: number;
 }) {
   fetch("/api/meta/event", {
     method: "POST",
@@ -93,6 +94,40 @@ export function trackViewContent(
     },
     { eventID: eventId }
   );
+}
+
+export function trackAddToCart(
+  product: {
+    id: string;
+    title: string;
+    retail_price: number;
+  },
+  quantity: number,
+  eventId: string
+) {
+  const value = product.retail_price * quantity;
+
+  trackMetaEvent(
+    "AddToCart",
+    {
+      content_ids: [product.id],
+      content_name: product.title,
+      content_type: "product",
+      value,
+      currency: "GBP",
+      num_items: quantity,
+    },
+    { eventID: eventId }
+  );
+
+  syncMetaCapiEvent({
+    eventName: "AddToCart",
+    eventId,
+    eventSourceUrl: window.location.href,
+    fbclid: getFbclidFromLocation(),
+    productId: product.id,
+    quantity,
+  });
 }
 
 export function trackInitiateCheckout(payload: {

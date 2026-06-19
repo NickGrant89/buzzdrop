@@ -7,11 +7,12 @@ import {
 } from "@/lib/meta-capi";
 
 const bodySchema = z.object({
-  eventName: z.enum(["PageView", "ViewContent"]),
+  eventName: z.enum(["PageView", "ViewContent", "AddToCart"]),
   eventId: z.string().min(8).max(128),
   eventSourceUrl: z.string().url(),
   fbclid: z.string().optional(),
   productId: z.string().optional(),
+  quantity: z.number().int().min(1).max(10).optional(),
 });
 
 export async function POST(request: Request) {
@@ -39,6 +40,24 @@ export async function POST(request: Request) {
     const product = getProductById(body.productId);
     if (!product) {
       return NextResponse.json({ ok: false }, { status: 404 });
+    }
+
+    const quantity = body.quantity ?? 1;
+
+    if (body.eventName === "AddToCart") {
+      await sendMetaCapiEvent("AddToCart", {
+        eventId: body.eventId,
+        eventSourceUrl: body.eventSourceUrl,
+        userData,
+        customData: {
+          value: product.retail_price * quantity,
+          currency: "GBP",
+          contentIds: [product.id],
+          contentName: product.title,
+          numItems: quantity,
+        },
+      });
+      return NextResponse.json({ ok: true });
     }
 
     await sendMetaCapiEvent("ViewContent", {

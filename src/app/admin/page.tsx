@@ -971,7 +971,7 @@ export default function AdminPage() {
               <p className="mt-1 text-xs text-zinc-600">
                 Meta Pixel:{" "}
                 {data.metaPixel.configured ? (
-                  <span className="text-emerald-400">Active (Purchase + Checkout tracking)</span>
+                  <span className="text-emerald-400">Active (ViewContent → AddToCart → Checkout → Purchase)</span>
                 ) : (
                   <span className="text-amber-400">Add NEXT_PUBLIC_META_PIXEL_ID in Railway</span>
                 )}

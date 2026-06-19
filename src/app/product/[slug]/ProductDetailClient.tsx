@@ -5,7 +5,12 @@ import type { Product } from "@/lib/db";
 import { useCart } from "@/context/CartContext";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { Minus, Plus } from "lucide-react";
-import { trackViewContent, createMetaEventId, getFbclidFromLocation } from "@/lib/meta-pixel";
+import {
+  trackViewContent,
+  trackAddToCart,
+  createMetaEventId,
+  getFbclidFromLocation,
+} from "@/lib/meta-pixel";
 
 export function ProductDetailClient({ product }: { product: Product }) {
   const { addItem } = useCart();
@@ -67,6 +72,7 @@ export function ProductDetailClient({ product }: { product: Product }) {
             },
             quantity
           );
+          trackAddToCart(product, quantity, createMetaEventId("atc"));
         }}
       />
     </div>

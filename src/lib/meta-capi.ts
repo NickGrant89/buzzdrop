@@ -1,7 +1,12 @@
 import { createHash } from "crypto";
 import { getSiteUrl } from "./seo";
 
-export type MetaCapiEventName = "PageView" | "ViewContent" | "InitiateCheckout" | "Purchase";
+export type MetaCapiEventName =
+  | "PageView"
+  | "ViewContent"
+  | "AddToCart"
+  | "InitiateCheckout"
+  | "Purchase";
 
 export type MetaCapiUserData = {
   email?: string;

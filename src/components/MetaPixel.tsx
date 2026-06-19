@@ -3,10 +3,15 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { getMetaPixelId, trackPageView } from "@/lib/meta-pixel";
+import {
+  getMetaPixelId,
+  getMetaPixelTestEventCode,
+  trackPageView,
+} from "@/lib/meta-pixel";
 
 export function MetaPixel() {
   const pixelId = getMetaPixelId();
+  const testEventCode = getMetaPixelTestEventCode();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -28,7 +33,11 @@ export function MetaPixel() {
           t.src=v;s=b.getElementsByTagName(e)[0];
           s.parentNode.insertBefore(t,s)}(window, document,'script',
           'https://connect.facebook.net/en_GB/fbevents.js');
-          fbq('init', '${pixelId}');
+          fbq('init', '${pixelId}'${
+            testEventCode
+              ? `, {}, { test_event_code: '${testEventCode.replace(/'/g, "\\'")}' }`
+              : ""
+          });
         `}
       </Script>
       <noscript>

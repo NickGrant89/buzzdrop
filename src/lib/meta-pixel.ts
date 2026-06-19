@@ -16,6 +16,11 @@ export function getMetaPixelId(): string {
   return process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim() ?? "";
 }
 
+/** Set while testing in Events Manager → Test events (remove in production). */
+export function getMetaPixelTestEventCode(): string {
+  return process.env.NEXT_PUBLIC_META_PIXEL_TEST_EVENT_CODE?.trim() ?? "";
+}
+
 export function isMetaPixelEnabled(): boolean {
   return getMetaPixelId().length > 0;
 }

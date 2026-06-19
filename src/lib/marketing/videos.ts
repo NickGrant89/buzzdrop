@@ -11,6 +11,18 @@ export function videoFilePath(slug: string): string {
   return join(getVideosDir(), `${slug}-ad.mp4`);
 }
 
+export function slideFilePath(slug: string): string {
+  const base = slug.endsWith("-slide") ? slug : `${slug}-slide`;
+  return join(getVideosDir(), `${base}.jpg`);
+}
+
+export function marketingAssetPath(slug: string, filename: string): string {
+  if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
+    return slideFilePath(slug);
+  }
+  return videoFilePath(slug);
+}
+
 export function videoFileExists(slug: string): boolean {
   return existsSync(videoFilePath(slug));
 }

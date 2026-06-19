@@ -300,6 +300,68 @@ function migrateSchema(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_cart_leads_email ON cart_leads(email);
   `);
+
+  seedHeroProductLanding(database);
+}
+
+function seedHeroProductLanding(database: Database.Database) {
+  const now = new Date().toISOString();
+  const slug = "note-board-creative-led-night-light-usb-message-953728";
+
+  database
+    .prepare(
+      `UPDATE products SET retail_price = 19.99, is_pinned = 1, updated_at = ?
+       WHERE slug = ? AND retail_price > 19.99`
+    )
+    .run(now, slug);
+
+  const existing = database
+    .prepare("SELECT seo_title FROM products WHERE slug = ?")
+    .get(slug) as { seo_title: string } | undefined;
+
+  if (!existing || existing.seo_title.trim()) return;
+
+  const noteBoardFaqs = JSON.stringify([
+    {
+      q: "How long does UK delivery take?",
+      a: "Free UK delivery on every order. Most Note Board orders arrive within 7–10 working days.",
+    },
+    {
+      q: "Is it a good gift?",
+      a: "Yes — it arrives in gift-ready packaging and is one of the most shared bedroom decor finds on TikTok.",
+    },
+    {
+      q: "How do I power it?",
+      a: "USB powered — plug into a phone charger, laptop, or USB socket. No batteries needed.",
+    },
+    {
+      q: "Can I return it if I'm not happy?",
+      a: "Yes — 14-day returns. Email support@buzzdrop.co.uk and we'll help with a return or exchange.",
+    },
+    {
+      q: "Is checkout secure?",
+      a: "Yes — all payments are processed securely via Stripe (card & Apple Pay). BuzzDrop is UK-based with support at support@buzzdrop.co.uk.",
+    },
+  ]);
+
+  database
+    .prepare(
+      `UPDATE products SET
+        seo_title = ?,
+        seo_description = ?,
+        seo_faqs = ?,
+        description = ?,
+        updated_at = ?
+      WHERE slug = ?`
+    )
+    .run(
+      "LED Note Board Night Light — Free UK Delivery | BuzzDrop",
+      "Write any message on this viral LED note board. USB powered, gift-ready packaging, free UK delivery & secure Stripe checkout. £19.99.",
+      noteBoardFaqs,
+      "Creative USB LED message board that lights up any text you write — like a mini neon sign for your bedside table, desk, or shelf. Transparent acrylic panel with a warm glow effect. USB powered (cable included). Arrives in gift-ready packaging. Free UK delivery.",
+      now,
+      slug
+    );
 }
 
 let dbInstance: Database.Database | null = null;

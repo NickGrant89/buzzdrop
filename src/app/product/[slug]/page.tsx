@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreLayout } from "@/components/StoreLayout";
 import { ProductDetailClient } from "./ProductDetailClient";
+import { ProductHeroMedia } from "@/components/ProductHeroMedia";
+import { ProductTrustStrip } from "@/components/ProductTrustStrip";
 import { getProductBySlug } from "@/lib/products";
 import { formatCategoryDisplay, categorySlug } from "@/lib/categories";
 import { getProductFaqs, getProductSeoDescription, getProductSeoTitle } from "@/lib/product-seo";
+import { getProductLanding } from "@/lib/product-landing";
 import { buildPageMetadata, productJsonLd, faqJsonLd, breadcrumbJsonLd } from "@/lib/seo";
 import { formatPrice } from "@/lib/utils";
-import { Truck, Shield, ArrowLeft } from "lucide-react";
+import { Truck, Shield, ArrowLeft, Gift, Check } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -40,9 +42,12 @@ export default async function ProductPage({
 
   if (!product) notFound();
 
+  const landing = getProductLanding(slug);
   const categoryLabel = formatCategoryDisplay(product.category);
   const categoryPath = `/category/${categorySlug(categoryLabel)}`;
-  const faqs = getProductFaqs(product);
+  const faqs = landing?.seoFaqs ?? getProductFaqs(product);
+  const displayTitle = landing?.displayTitle ?? product.title;
+  const description = landing?.dbDescription ?? product.description;
 
   return (
     <StoreLayout>
@@ -61,7 +66,7 @@ export default async function ProductPage({
             breadcrumbJsonLd([
               { name: "Home", path: "/" },
               { name: categoryLabel, path: categoryPath },
-              { name: product.title, path: `/product/${product.slug}` },
+              { name: displayTitle, path: `/product/${product.slug}` },
             ])
           ),
         }}
@@ -76,16 +81,12 @@ export default async function ProductPage({
         </Link>
 
         <div className="grid gap-10 lg:grid-cols-2">
-          <div className="relative aspect-square overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
-            <Image
-              src={product.image_url}
-              alt={product.title}
-              fill
-              className="object-cover"
-              priority
-              sizes="(max-width: 1024px) 100vw, 50vw"
-            />
-          </div>
+          <ProductHeroMedia
+            imageUrl={product.image_url}
+            alt={displayTitle}
+            videoUrl={landing?.videoUrl}
+            posterUrl={landing?.posterUrl}
+          />
 
           <div>
             <span className="text-sm font-medium uppercase tracking-wider text-amber-400">
@@ -93,31 +94,70 @@ export default async function ProductPage({
                 {categoryLabel}
               </Link>
             </span>
-            <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{product.title}</h1>
 
-            <div className="mt-4 flex items-center gap-4">
+            <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{displayTitle}</h1>
+
+            {landing?.tagline ? (
+              <p className="mt-3 text-lg leading-relaxed text-zinc-300">{landing.tagline}</p>
+            ) : null}
+
+            <div className="mt-5">
+              <ProductTrustStrip />
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               <span className="text-3xl font-bold text-white">
                 {formatPrice(product.retail_price)}
               </span>
+              {landing?.compareAtPrice && landing.compareAtPrice > product.retail_price ? (
+                <span className="text-lg text-zinc-500 line-through">
+                  {formatPrice(landing.compareAtPrice)}
+                </span>
+              ) : null}
               <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
                 Free UK delivery
               </span>
             </div>
 
-            <p className="mt-6 leading-relaxed text-zinc-400">{product.description}</p>
+            {landing?.promoBadge ? (
+              <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-300">
+                <Gift className="h-4 w-4 shrink-0" />
+                {landing.promoBadge}
+              </p>
+            ) : null}
+
+            <p className="mt-3 text-sm text-zinc-400">
+              Secure checkout via Stripe · Card &amp; Apple Pay ·{" "}
+              <a href="mailto:support@buzzdrop.co.uk" className="text-zinc-300 hover:text-white">
+                support@buzzdrop.co.uk
+              </a>
+            </p>
+
+            {landing?.bullets?.length ? (
+              <ul className="mt-6 space-y-2">
+                {landing.bullets.map((bullet) => (
+                  <li key={bullet} className="flex items-start gap-2 text-sm text-zinc-300">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <p className="mt-6 leading-relaxed text-zinc-400">{description}</p>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-zinc-800 p-4">
                 <Truck className="mb-2 h-5 w-5 text-amber-400" />
-                <p className="text-sm font-medium text-white">Free shipping</p>
-                <p className="text-xs text-zinc-500">5–15 working days</p>
+                <p className="text-sm font-medium text-white">Free UK shipping</p>
+                <p className="text-xs text-zinc-500">Usually arrives within 7–10 working days</p>
               </div>
               <div className="rounded-xl border border-zinc-800 p-4">
                 <Shield className="mb-2 h-5 w-5 text-amber-400" />
                 <p className="text-sm font-medium text-white">14-day returns</p>
                 <p className="text-xs text-zinc-500">
                   <Link href="/returns" className="hover:text-zinc-300">
-                    See policy
+                    UK support · See policy
                   </Link>
                 </p>
               </div>
@@ -125,7 +165,7 @@ export default async function ProductPage({
 
             <p className="mt-4 text-sm text-zinc-500">
               {product.stock > 0 ? (
-                <span className="text-emerald-400">{product.stock} in stock</span>
+                <span className="text-emerald-400">{product.stock} in stock — ships from UK warehouse</span>
               ) : (
                 <span className="text-red-400">Out of stock</span>
               )}

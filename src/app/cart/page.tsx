@@ -289,8 +289,14 @@ export default function CartPage() {
 
                 <p className="mt-3 text-center text-xs leading-relaxed text-zinc-500">
                   {stripeEnabled
-                    ? "Secure card payment via Stripe · GBP"
+                    ? "Secure Stripe checkout · Card & Apple Pay · Free UK delivery · 14-day returns"
                     : "Demo checkout — add Stripe keys to .env.local for real payments"}
+                </p>
+                <p className="mt-2 text-center text-xs text-zinc-500">
+                  Usually arrives within 7–10 working days · UK support{" "}
+                  <a href="mailto:support@buzzdrop.co.uk" className="text-zinc-400 hover:text-zinc-300">
+                    support@buzzdrop.co.uk
+                  </a>
                 </p>
                 <p className="mt-2 text-center text-xs text-zinc-500">
                   By checking out you agree to our{" "}

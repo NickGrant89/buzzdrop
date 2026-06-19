@@ -17,7 +17,7 @@ export function defaultProductFaqs(product: Product): ProductFaq[] {
   return [
     {
       q: `How long does UK delivery take?`,
-      a: "Free UK delivery on every order. Most items arrive within 5–15 working days.",
+      a: "Free UK delivery on every order. Most items arrive within 7–10 working days.",
     },
     {
       q: "Can I return this if I'm not happy?",

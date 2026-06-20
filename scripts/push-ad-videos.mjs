@@ -22,10 +22,21 @@ function loadEnvLocal() {
   try {
     const raw = readFileSync(join(ROOT, ".env.local"), "utf8");
     for (const line of raw.split("\n")) {
-      const m = line.match(/^([A-Z_]+)=(.*)$/);
-      if (m && !process.env[m[1]]) {
-        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const m = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (!m || process.env[m[1]]) continue;
+      let value = m[2].trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      } else {
+        const hash = value.indexOf(" #");
+        if (hash !== -1) value = value.slice(0, hash);
       }
+      process.env[m[1]] = value.trim();
     }
   } catch {
     /* optional */
@@ -36,20 +47,23 @@ function parseArgs() {
   const args = process.argv.slice(2);
   let url = null;
   let live = false;
+  let password = null;
 
   for (const arg of args) {
     if (arg === "--live") live = true;
     else if (arg.startsWith("--url=")) url = arg.slice("--url=".length).trim();
+    else if (arg.startsWith("--password=")) password = arg.slice("--password=".length);
     else if (arg === "--help" || arg === "-h") {
       console.log(`Usage:
   npm run push:videos
   node scripts/push-ad-videos.mjs --live
-  node scripts/push-ad-videos.mjs --url=https://www.buzzdrop.co.uk`);
+  node scripts/push-ad-videos.mjs --live --password=YOUR_RAILWAY_PASSWORD
+  ADMIN_PASSWORD=xxx node scripts/push-ad-videos.mjs --live`);
       process.exit(0);
     }
   }
 
-  return { url, live };
+  return { url, live, password };
 }
 
 function resolveTargetBase(urlArg, live) {
@@ -107,7 +121,7 @@ async function uploadAsset(base, cookie, slug, filename, buffer, mime) {
 
 loadEnvLocal();
 
-const { url: urlArg, live } = parseArgs();
+const { url: urlArg, live, password: passwordArg } = parseArgs();
 const targetBase = resolveTargetBase(urlArg, live);
 
 if (!targetBase) {
@@ -119,10 +133,10 @@ if (!targetBase) {
   process.exit(1);
 }
 
-const password = process.env.ADMIN_PASSWORD;
+const password = passwordArg ?? process.env.ADMIN_PASSWORD;
 
 if (!password || password.length < 8) {
-  console.error("Set ADMIN_PASSWORD in .env.local (min 8 chars)");
+  console.error("Set ADMIN_PASSWORD in .env.local (min 8 chars), or pass --password=");
   process.exit(1);
 }
 
@@ -151,7 +165,23 @@ const loginRes = await fetchWithTimeout(
 );
 
 if (!loginRes.ok) {
-  console.error("Admin login failed:", loginRes.status, await loginRes.text());
+  const text = await loginRes.text();
+  console.error("Admin login failed:", loginRes.status, text);
+  if (loginRes.status === 401) {
+    console.error(`
+The password sent from this machine does not match ADMIN_PASSWORD on ${targetBase}.
+
+Common causes:
+  • .env.local password differs from Railway → Variables → ADMIN_PASSWORD
+  • ADMIN_AUTO_LOGIN=true on live lets you open /admin without typing a password
+
+Fix:
+  1. Railway dashboard → BuzzDrop service → Variables → copy ADMIN_PASSWORD
+  2. Run: node scripts/push-ad-videos.mjs --live --password=THAT_PASSWORD
+
+Or test at https://www.buzzdrop.co.uk/admin/login — if login fails there too,
+update Railway ADMIN_PASSWORD to match your .env.local and redeploy.`);
+  }
   process.exit(1);
 }
 

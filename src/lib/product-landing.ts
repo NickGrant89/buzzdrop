@@ -37,6 +37,12 @@ function buildNoteBoardLanding(): ProductLanding {
     promoBadge: "Free UK delivery + gift-ready packaging",
     compareAtPrice: 22.99,
     promoRetailPrice: 19.99,
+    bullets: [
+      "Write any message — names, quotes, reminders, or jokes",
+      "Soft LED glow — perfect bedside lamp or desk decor",
+      "USB powered — plug in and go, no batteries",
+      "Gift-ready box — ideal for birthdays, bedrooms & TikTok fans",
+    ],
     ...media,
     seoTitle: "LED Note Board Night Light — Free UK Delivery | BuzzDrop",
     seoDescription:

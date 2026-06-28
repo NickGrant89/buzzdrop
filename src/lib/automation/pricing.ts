@@ -27,6 +27,11 @@ export function roundToCharmPrice(price: number): number {
   return Math.ceil(price + 0.01) - 0.01;
 }
 
+/** Shelf price shown on site, checkout, ads, and export — always rounded up to .99. */
+export function getProductDisplayPrice(product: { retail_price: number }): number {
+  return roundToCharmPrice(product.retail_price);
+}
+
 function minRetailForMargin(landedCost: number): number {
   if (landedCost <= 0) return roundToCharmPrice(0.01);
   return roundToCharmPrice(landedCost / (1 - MIN_MARGIN_PERCENT / 100));

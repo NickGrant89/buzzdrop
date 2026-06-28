@@ -31,6 +31,7 @@ type CheckoutPayload = {
   city: string;
   county?: string;
   postcode: string;
+  country: string;
   total: number;
   productIds?: string[];
   numItems?: number;
@@ -67,7 +68,7 @@ function PaymentForm({ checkout }: { checkout: CheckoutPayload }) {
               city: checkout.city,
               state: checkout.county || undefined,
               postal_code: checkout.postcode,
-              country: "GB",
+              country: checkout.country || "GB",
             },
           },
         },

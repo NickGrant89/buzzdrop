@@ -1,9 +1,12 @@
 import Stripe from "stripe";
 import { db } from "./db";
 import { getProductById } from "./products";
+import { getProductDisplayPrice } from "./automation/pricing";
 import { storeConfig } from "./config";
 import { v4 as uuidv4 } from "uuid";
 import type { UkCheckoutDetails } from "./automation/fulfillment";
+import { quoteCartShipping } from "./checkout-shipping";
+import { countryLabel } from "./ship-countries";
 import {
   sendMetaCapiEvent,
   splitName,
@@ -32,20 +35,30 @@ function toUkPhoneE164(phone: string): string {
   return `+44${digits}`;
 }
 
+function formatPhoneE164(phone: string, countryCode: string): string {
+  if (phone.startsWith("+")) return phone;
+  if (countryCode === "GB") return toUkPhoneE164(phone);
+  const digits = phone.replace(/\D/g, "");
+  return digits ? `+${digits}` : phone;
+}
+
 function insertPendingOrder(
   orderId: string,
   details: UkCheckoutDetails,
   items: CheckoutItem[],
   total: number,
-  stripeRef: string | null
+  stripeRef: string | null,
+  shippingCostGbp: number
 ) {
   const now = new Date().toISOString();
+  const countryCode = (details.country || "GB").toUpperCase();
+  const countryName = countryLabel(countryCode);
   const shippingAddress = [
     details.line1,
     details.city,
     details.county,
     details.postcode,
-    "United Kingdom",
+    countryName,
   ]
     .filter(Boolean)
     .join(", ");
@@ -54,8 +67,9 @@ function insertPendingOrder(
     INSERT INTO orders (
       id, stripe_session_id, customer_email, customer_name, shipping_address,
       shipping_line1, shipping_line2, shipping_city, shipping_county, shipping_postcode, shipping_phone,
+      shipping_country, shipping_cost_gbp,
       status, total, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
   `).run(
     orderId,
     stripeRef,
@@ -68,6 +82,8 @@ function insertPendingOrder(
     details.county ?? "",
     details.postcode,
     details.phone,
+    countryCode,
+    shippingCostGbp,
     total,
     now,
     now
@@ -85,7 +101,7 @@ function insertPendingOrder(
       orderId,
       product.id,
       item.quantity,
-      product.retail_price,
+      getProductDisplayPrice(product),
       product.supplier_cost
     );
   }
@@ -98,6 +114,7 @@ async function notifyOrderPaid(orderId: string, userData?: MetaCapiUserData) {
         customer_name: string;
         shipping_phone: string;
         shipping_postcode: string;
+        shipping_country: string;
         total: number;
       }
     | undefined;
@@ -117,7 +134,7 @@ async function notifyOrderPaid(orderId: string, userData?: MetaCapiUserData) {
       email: order.customer_email,
       phone: order.shipping_phone,
       postcode: order.shipping_postcode,
-      country: "gb",
+      country: (order.shipping_country || "gb").toLowerCase(),
       ...nameParts,
       ...userData,
     },
@@ -165,15 +182,27 @@ function finalizePaidOrder(orderId: string): { orderId: string | null; newlyPaid
 export async function createOrderPayment(items: CheckoutItem[], details: UkCheckoutDetails) {
   const stripe = getStripe();
   const orderId = uuidv4();
-  let total = 0;
+  const countryCode = (details.country || "GB").toUpperCase();
+  let subtotal = 0;
 
   for (const item of items) {
     const product = getProductById(item.productId);
     if (!product || product.stock < item.quantity) {
       throw new Error(`Product unavailable: ${item.productId}`);
     }
-    total += product.retail_price * item.quantity;
+    subtotal += getProductDisplayPrice(product) * item.quantity;
   }
+  subtotal = Math.round(subtotal * 100) / 100;
+
+  const quote = await quoteCartShipping({
+    items,
+    destCountryCode: countryCode,
+    destPostcode: details.postcode,
+    subtotalGbp: subtotal,
+  });
+
+  const total = quote.totalGbp;
+  const shippingCostGbp = quote.shippingCostGbp;
 
   const amount = Math.round(total * 100);
   if (amount < 30) {
@@ -181,7 +210,7 @@ export async function createOrderPayment(items: CheckoutItem[], details: UkCheck
   }
 
   if (!stripe) {
-    return { demo: true as const, orderId, total };
+    return { demo: true as const, orderId, total, shippingCostGbp, country: countryCode };
   }
 
   const paymentIntent = await stripe.paymentIntents.create({
@@ -191,24 +220,26 @@ export async function createOrderPayment(items: CheckoutItem[], details: UkCheck
     receipt_email: details.email,
     metadata: {
       order_id: orderId,
-      customer_phone: toUkPhoneE164(details.phone),
+      customer_phone: formatPhoneE164(details.phone, countryCode),
       customer_name: details.name,
       shipping_line1: details.line1,
       shipping_line2: details.line2 ?? "",
       shipping_city: details.city,
       shipping_county: details.county ?? "",
       shipping_postcode: details.postcode.toUpperCase(),
+      shipping_country: countryCode,
+      shipping_cost_gbp: String(shippingCostGbp),
     },
     shipping: {
       name: details.name,
-      phone: toUkPhoneE164(details.phone),
+      phone: formatPhoneE164(details.phone, countryCode),
       address: {
         line1: details.line1,
         line2: details.line2 || undefined,
         city: details.city,
         state: details.county || undefined,
         postal_code: details.postcode.toUpperCase(),
-        country: "GB",
+        country: countryCode,
       },
     },
   });
@@ -217,13 +248,15 @@ export async function createOrderPayment(items: CheckoutItem[], details: UkCheck
     throw new Error("Stripe did not return a payment client secret");
   }
 
-  insertPendingOrder(orderId, details, items, total, paymentIntent.id);
+  insertPendingOrder(orderId, details, items, total, paymentIntent.id, shippingCostGbp);
 
   return {
     demo: false as const,
     clientSecret: paymentIntent.client_secret,
     orderId,
     total,
+    shippingCostGbp,
+    country: countryCode,
   };
 }
 

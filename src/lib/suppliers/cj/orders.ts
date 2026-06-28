@@ -11,6 +11,30 @@ export type UkShippingAddress = {
   city: string;
   county?: string;
   postcode: string;
+  countryCode: string;
+};
+
+const CJ_COUNTRY_NAMES: Record<string, string> = {
+  GB: "United Kingdom",
+  US: "United States",
+  CA: "Canada",
+  AU: "Australia",
+  NZ: "New Zealand",
+  IE: "Ireland",
+  DE: "Germany",
+  FR: "France",
+  NL: "Netherlands",
+  ES: "Spain",
+  IT: "Italy",
+  BE: "Belgium",
+  SE: "Sweden",
+  NO: "Norway",
+  DK: "Denmark",
+  CH: "Switzerland",
+  AT: "Austria",
+  SG: "Singapore",
+  AE: "United Arab Emirates",
+  IN: "India",
 };
 
 export type CjOrderItem = {
@@ -47,17 +71,19 @@ export async function createCjOrder(input: CreateCjOrderInput): Promise<{
 }> {
   const { shipping, items, orderNumber } = input;
 
+  const countryCode = (shipping.countryCode || "GB").toUpperCase();
+
   const shippingMethod = await resolveShipping(
     items.map((i) => ({ vid: i.vid, quantity: i.quantity })),
-    "GB",
+    countryCode,
     shipping.postcode
   );
 
   const payload = {
     orderNumber,
     shippingZip: shipping.postcode.replace(/\s/g, ""),
-    shippingCountry: "United Kingdom",
-    shippingCountryCode: "GB",
+    shippingCountry: CJ_COUNTRY_NAMES[countryCode] ?? countryCode,
+    shippingCountryCode: countryCode,
     shippingProvince: shipping.county || shipping.city,
     shippingCity: shipping.city,
     shippingCounty: shipping.county ?? "",
@@ -66,7 +92,7 @@ export async function createCjOrder(input: CreateCjOrderInput): Promise<{
     shippingAddress: shipping.line1,
     shippingAddress2: shipping.line2 ?? "",
     email: shipping.email,
-    remark: input.remark ?? "BuzzDrop UK order",
+    remark: input.remark ?? `BuzzDrop order (${countryCode})`,
     logisticName: shippingMethod.logisticName,
     fromCountryCode: shippingMethod.fromCountryCode,
     platform: cjConfig.platform,

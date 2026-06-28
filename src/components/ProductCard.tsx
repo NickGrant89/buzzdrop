@@ -2,8 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Flame } from "lucide-react";
 import type { Product } from "@/lib/db";
+import { getProductDisplayPrice } from "@/lib/automation/pricing";
 import { formatCategoryDisplay } from "@/lib/categories";
 import { formatPrice } from "@/lib/utils";
+import { SHIPPING_BADGE } from "@/lib/store-copy";
 
 export function ProductCard({ product }: { product: Product }) {
   const isHot = product.trend_score >= 90;
@@ -38,8 +40,10 @@ export function ProductCard({ product }: { product: Product }) {
           {product.title}
         </h3>
         <div className="mt-auto flex items-center justify-between">
-          <span className="text-lg font-bold text-white">{formatPrice(product.retail_price)}</span>
-          <span className="text-xs text-zinc-500">Free delivery</span>
+          <span className="text-lg font-bold text-white">
+            {formatPrice(getProductDisplayPrice(product))}
+          </span>
+          <span className="text-xs text-zinc-500">{SHIPPING_BADGE}</span>
         </div>
       </div>
     </Link>

@@ -1,5 +1,8 @@
 import type { ProductFaq } from "./product-seo";
+import { getProductDisplayPrice } from "./automation/pricing";
 import { getSiteUrl } from "./seo";
+
+export { getProductDisplayPrice };
 
 /** Hero product slugs with conversion-focused landing page content. */
 export const NOTE_BOARD_SLUG = "note-board-creative-led-night-light-usb-message-953728";
@@ -9,7 +12,7 @@ export type ProductLanding = {
   displayTitle: string;
   tagline: string;
   promoBadge: string;
-  compareAtPrice: number;
+  compareAtPrice?: number;
   bullets: string[];
   videoUrl: string;
   posterUrl: string;
@@ -17,7 +20,6 @@ export type ProductLanding = {
   seoDescription: string;
   seoFaqs: ProductFaq[];
   dbDescription: string;
-  promoRetailPrice: number;
 };
 
 function mediaUrlsForSlug(slug: string) {
@@ -35,8 +37,6 @@ function buildNoteBoardLanding(): ProductLanding {
     displayTitle: "LED Note Board Night Light",
     tagline: "The viral bedside message board — write any text and it glows like mini neon.",
     promoBadge: "Free UK delivery + gift-ready packaging",
-    compareAtPrice: 22.99,
-    promoRetailPrice: 19.99,
     bullets: [
       "Write any message — names, quotes, reminders, or jokes",
       "Soft LED glow — perfect bedside lamp or desk decor",
@@ -46,7 +46,7 @@ function buildNoteBoardLanding(): ProductLanding {
     ...media,
     seoTitle: "LED Note Board Night Light — Free UK Delivery | BuzzDrop",
     seoDescription:
-      "Write any message on this viral LED note board. USB powered, gift-ready packaging, free UK delivery & secure Stripe checkout. £19.99.",
+      "Write any message on this viral LED note board. USB powered, gift-ready packaging, free UK delivery & secure Stripe checkout. £22.99.",
     dbDescription:
       "Creative USB LED message board that lights up any text you write — like a mini neon sign for your bedside table, desk, or shelf. Transparent acrylic panel with a warm glow effect. USB powered (cable included). Arrives in gift-ready packaging. Free UK delivery.",
     seoFaqs: [

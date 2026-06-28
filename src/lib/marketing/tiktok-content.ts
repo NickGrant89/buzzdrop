@@ -1,4 +1,5 @@
 import type { Product } from "@/lib/db";
+import { getProductDisplayPrice } from "@/lib/product-landing";
 import { getSiteUrl } from "@/lib/seo";
 import { formatPrice } from "@/lib/utils";
 
@@ -33,7 +34,8 @@ function detectTheme(slug: string, title: string): ProductTheme {
   if (/cool|fan|air.?condition/.test(text)) return "cooler";
   if (/lamp|speaker|bluetooth|g-shaped/.test(text)) return "lamp";
   if (/hair.?removal|crystal|beauty|skin/.test(text)) return "beauty";
-  if (/washer|sink|spray|kitchen|cup/.test(text)) return "kitchen";
+  if (/washer|sink|spray|bar.?counter|cup.?washer/.test(text)) return "kitchen";
+  if (/dog|pet|cat|water.?bottle/.test(text)) return "generic";
   return "generic";
 }
 
@@ -236,7 +238,7 @@ export function buildTikTokManualPost(
 ): TikTokManualPost {
   const siteUrl = getSiteUrl();
   const productUrl = `${siteUrl}/product/${product.slug}`;
-  const priceLabel = formatPrice(product.retail_price);
+  const priceLabel = formatPrice(getProductDisplayPrice(product));
   const theme = detectTheme(product.slug, product.title);
   const caption = buildCaption(product, theme, priceLabel);
   const hashtags = baseHashtags(theme);

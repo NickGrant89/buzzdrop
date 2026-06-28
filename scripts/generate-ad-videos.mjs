@@ -6,7 +6,7 @@
  * Usage: npm run generate:videos
  * Output: public/social/videos/*-ad.mp4
  */
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
@@ -74,6 +74,32 @@ const HERO_PRICE_MIN = 15;
 const HERO_PRICE_MAX = 45;
 const HERO_MIN_MARGIN_GBP = 4;
 
+/** Round up to nearest .99 shelf price — matches src/lib/automation/pricing.ts */
+function roundToCharmPrice(price) {
+  const n = Number(price);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.ceil(n + 0.01) - 0.01;
+}
+
+function displayPriceForProduct(product) {
+  return roundToCharmPrice(product.retail_price);
+}
+
+async function loadDisplayPriceMap(site) {
+  try {
+    const res = await fetch(`${site}/api/marketing/export?limit=20`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const map = {};
+    for (const p of data.products ?? []) {
+      if (p.slug && p.priceGbp != null) map[p.slug] = Number(p.priceGbp);
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 function marginGbp(product) {
   return Math.round((Number(product.retail_price) - Number(product.supplier_cost)) * 100) / 100;
 }
@@ -130,8 +156,9 @@ function pickHeroProducts(products, limit = 3) {
   return picked.slice(0, limit);
 }
 
-function heroFromProduct(p) {
-  const priceNum = Number(p.retail_price);
+function heroFromProduct(p, priceMap = {}) {
+  const priceNum =
+    priceMap[p.slug] != null ? priceMap[p.slug] : displayPriceForProduct(p);
   const title = p.title.length > 36 ? `${p.title.slice(0, 33)}…` : p.title;
   return {
     slug: p.slug,
@@ -145,18 +172,41 @@ function heroFromProduct(p) {
   };
 }
 
-async function loadHeroes(site) {
+async function loadHeroes(site, limit = 6, slugFilter = null) {
+  const priceMap = await loadDisplayPriceMap(site);
+
+  if (slugFilter) {
+    const res = await fetch(`${site}/api/products`);
+    if (!res.ok) throw new Error("Could not fetch products");
+    const data = await res.json();
+    const product = (data.products ?? []).find((p) => p.slug === slugFilter);
+    if (!product) throw new Error(`Product not found: ${slugFilter}`);
+    const priceArg = process.argv.find((a) => a.startsWith("--price="));
+    if (priceArg) {
+      product.retail_price = Number(priceArg.split("=")[1]);
+    }
+    console.log(`Generating for slug: ${slugFilter}`);
+    return [heroFromProduct(product, priceMap)];
+  }
+
+  let fromHeroes = [];
   try {
     const heroRes = await fetch(`${site}/api/products/heroes`);
     if (heroRes.ok) {
       const data = await heroRes.json();
       if (data.heroes?.length > 0) {
-        console.log("Using hero products from /api/products/heroes");
-        return data.heroes.map(heroFromProduct);
+        fromHeroes = data.heroes
+          .slice(0, limit)
+          .map((p) => heroFromProduct(p, priceMap));
+        console.log(`Using ${fromHeroes.length} hero product(s) from /api/products/heroes`);
       }
     }
   } catch {
     /* fall through */
+  }
+
+  if (fromHeroes.length >= limit) {
+    return fromHeroes.slice(0, limit);
   }
 
   try {
@@ -164,13 +214,24 @@ async function loadHeroes(site) {
     if (!res.ok) throw new Error("Could not fetch products");
     const data = await res.json();
     const products = data.products ?? [];
-    const heroes = pickHeroProducts(products, 3);
+    const heroes = pickHeroProducts(products, limit);
     if (heroes.length > 0) {
-      console.log("Using hero products from live catalog scoring");
-      return heroes.map(heroFromProduct);
+      console.log(`Using ${heroes.length} product(s) from live catalog scoring`);
+      const mapped = heroes.map((p) => heroFromProduct(p, priceMap));
+      const seen = new Set(fromHeroes.map((h) => h.slug));
+      for (const h of mapped) {
+        if (fromHeroes.length >= limit) break;
+        if (seen.has(h.slug)) continue;
+        fromHeroes.push(h);
+        seen.add(h.slug);
+      }
     }
   } catch (err) {
-    console.warn("Could not load heroes:", err instanceof Error ? err.message : err);
+    console.warn("Could not load catalog:", err instanceof Error ? err.message : err);
+  }
+
+  if (fromHeroes.length > 0) {
+    return fromHeroes.slice(0, limit);
   }
 
   throw new Error("No hero products found — sync products first");
@@ -460,10 +521,16 @@ async function main() {
     process.exit(1);
   }
 
+  const limitArg = process.argv.find((a) => a.startsWith("--limit="));
+  const slugArg = process.argv.find((a) => a.startsWith("--slug="));
+  const slugFilter = slugArg?.split("=")[1]?.trim() || null;
+  const limit = Number(limitArg?.split("=")[1] ?? process.env.VIDEO_GEN_LIMIT ?? 6);
+  const skipExisting = process.argv.includes("--skip-existing") && !slugFilter;
+
   mkdirSync(OUT, { recursive: true });
   const site = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "https://www.buzzdrop.co.uk";
 
-  const heroes = await loadHeroes(site);
+  const heroes = await loadHeroes(site, Math.max(1, limit), slugFilter);
   if (heroes.length === 0) {
     console.error("No products found");
     process.exit(1);
@@ -471,14 +538,22 @@ async function main() {
 
   console.log("Generating 3-scene ad videos (hook → product → CTA)…\n");
 
+  let made = 0;
   for (const hero of heroes) {
+    const mp4Path = join(OUT, `${hero.slug}-ad.mp4`);
+    if (skipExisting && existsSync(mp4Path)) {
+      console.log(`→ ${hero.title}`);
+      console.log(`  skip (exists)`);
+      continue;
+    }
     console.log(`→ ${hero.title}`);
     const productBuffer = await fetchImage(hero.image_url);
-    const mp4Path = await generateHeroVideo(hero, productBuffer);
+    await generateHeroVideo(hero, productBuffer);
     console.log(`  ✓ ${mp4Path}`);
+    made++;
   }
 
-  console.log("\nDone. Upload MP4s to TikTok / Reels / Meta video ads.");
+  console.log(`\nDone — ${made} new video(s). Upload MP4s to TikTok / Reels / Meta video ads.`);
   console.log("Tip: film a 15-sec real demo later — swap when you have footage.");
 }
 

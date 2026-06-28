@@ -1,16 +1,10 @@
 import { getProductById } from "./products";
 import { listCjShippingQuotes, type ShippingQuoteOption } from "./suppliers/cj/shipping";
 import { cjShippingEstimatePostcode } from "./config";
+import { SHIP_COUNTRIES, countryLabel } from "./ship-countries";
 
-export const MANUAL_SHIP_COUNTRIES = [
-  { code: "GB", label: "United Kingdom", postcodeLabel: "Postcode", postcodePlaceholder: "SW1A 1AA" },
-  { code: "US", label: "United States", postcodeLabel: "ZIP code", postcodePlaceholder: "75001" },
-  { code: "CA", label: "Canada", postcodeLabel: "Postal code", postcodePlaceholder: "M5H 2N2" },
-  { code: "AU", label: "Australia", postcodeLabel: "Postcode", postcodePlaceholder: "2000" },
-  { code: "IE", label: "Ireland", postcodeLabel: "Eircode", postcodePlaceholder: "D02 X285" },
-  { code: "DE", label: "Germany", postcodeLabel: "Postcode", postcodePlaceholder: "10115" },
-  { code: "FR", label: "France", postcodeLabel: "Postcode", postcodePlaceholder: "75001" },
-] as const;
+export const MANUAL_SHIP_COUNTRIES = SHIP_COUNTRIES;
+export { countryLabel };
 
 export type ManualShippingQuote = {
   productId: string;

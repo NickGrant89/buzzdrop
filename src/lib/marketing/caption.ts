@@ -1,4 +1,5 @@
 import type { Product } from "@/lib/db";
+import { getProductDisplayPrice } from "@/lib/automation/pricing";
 import { formatCategoryDisplay } from "@/lib/categories";
 import { getSiteUrl } from "@/lib/seo";
 import { formatPrice } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function buildMarketingPost(product: Product): MarketingPostPayload {
   const siteUrl = getSiteUrl();
   const productUrl = `${siteUrl}/product/${product.slug}`;
   const category = formatCategoryDisplay(product.category);
-  const priceLabel = formatPrice(product.retail_price);
+  const priceLabel = formatPrice(getProductDisplayPrice(product));
   const hashtags = [
     categoryHashtag(category),
     "#ukshopping",

@@ -3,6 +3,8 @@ import { db } from "../db";
 import { logAutomation } from "./logger";
 import { isCjConfigured } from "../config";
 import { createCjOrder, getCjOrderTracking, type UkShippingAddress } from "../suppliers/cj/orders";
+import { getProductDisplayPrice } from "../automation/pricing";
+import { countryLabel } from "../manual-shipping";
 import { parseUkAddress } from "../utils";
 
 export async function fulfillPendingOrders(): Promise<number> {
@@ -23,6 +25,7 @@ export async function fulfillPendingOrders(): Promise<number> {
     shipping_county: string;
     shipping_postcode: string;
     shipping_phone: string;
+    shipping_country: string;
   }>;
 
   if (pendingOrders.length === 0) return 0;
@@ -102,7 +105,10 @@ function buildShippingAddress(order: {
   shipping_postcode: string;
   shipping_phone: string;
   shipping_address: string;
+  shipping_country?: string;
 }): UkShippingAddress {
+  const countryCode = (order.shipping_country || "GB").toUpperCase();
+
   if (order.shipping_line1 && order.shipping_postcode) {
     return {
       name: order.customer_name,
@@ -113,6 +119,7 @@ function buildShippingAddress(order: {
       city: order.shipping_city || "London",
       county: order.shipping_county || undefined,
       postcode: order.shipping_postcode,
+      countryCode,
     };
   }
 
@@ -124,6 +131,7 @@ function buildShippingAddress(order: {
     line1: parsed.line1,
     city: parsed.city,
     postcode: parsed.postcode,
+    countryCode,
   };
 }
 
@@ -166,6 +174,9 @@ export type UkCheckoutDetails = {
   city: string;
   county?: string;
   postcode: string;
+  country: string;
+  shippingCostGbp?: number;
+  shippingMethod?: string;
 };
 
 export function createDemoOrder(
@@ -174,18 +185,19 @@ export function createDemoOrder(
 ): string {
   const orderId = uuidv4();
   const now = new Date().toISOString();
+  const countryCode = (details.country || "GB").toUpperCase();
 
   const shippingAddress = [
     details.line1,
     details.city,
     details.county,
     details.postcode,
-    "GB",
+    countryLabel(countryCode),
   ]
     .filter(Boolean)
     .join(", ");
 
-  let total = 0;
+  let subtotal = 0;
 
   const getProduct = db.prepare("SELECT * FROM products WHERE id = ? AND is_active = 1");
   const insertItem = db.prepare(`
@@ -208,16 +220,21 @@ export function createDemoOrder(
       throw new Error("Product unavailable — remove it from your cart and add it again");
     }
     lineItems.push({ product, quantity: item.quantity });
-    total += product.retail_price * item.quantity;
+    subtotal += getProductDisplayPrice(product) * item.quantity;
   }
+
+  subtotal = Math.round(subtotal * 100) / 100;
+  const shippingCostGbp = details.shippingCostGbp ?? (countryCode === "GB" ? 0 : 0);
+  const total = Math.round((subtotal + shippingCostGbp) * 100) / 100;
 
   const transaction = db.transaction(() => {
     db.prepare(`
       INSERT INTO orders (
         id, stripe_session_id, customer_email, customer_name, shipping_address,
         shipping_line1, shipping_line2, shipping_city, shipping_county, shipping_postcode, shipping_phone,
+        shipping_country, shipping_cost_gbp,
         status, total, created_at, updated_at
-      ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?)
+      ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?)
     `).run(
       orderId,
       details.email,
@@ -229,6 +246,8 @@ export function createDemoOrder(
       details.county ?? "",
       details.postcode,
       details.phone,
+      countryCode,
+      shippingCostGbp,
       total,
       now,
       now
@@ -240,7 +259,7 @@ export function createDemoOrder(
         orderId,
         product.id,
         quantity,
-        product.retail_price,
+        getProductDisplayPrice(product),
         product.supplier_cost
       );
 

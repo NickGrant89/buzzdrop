@@ -12,7 +12,10 @@
     "lint": "eslint",
     "generate:social": "node scripts/generate-facebook-assets.mjs",
     "generate:videos": "node scripts/generate-ad-videos.mjs",
-    "push:videos": "node scripts/push-ad-videos.mjs"
+    "generate:videos:all": "node scripts/generate-ad-videos.mjs --limit=12",
+    "generate:video:note-board": "node scripts/generate-ad-videos.mjs --slug=note-board-creative-led-night-light-usb-message-953728",
+    "push:videos": "node scripts/push-ad-videos.mjs",
+    "tiktok:pack": "node scripts/tiktok-manual-pack.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.6.0",

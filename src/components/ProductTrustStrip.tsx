@@ -1,15 +1,15 @@
 import { CreditCard, Mail, RotateCcw, Truck } from "lucide-react";
 
-const SUPPORT_EMAIL = "support@buzzdrop.co.uk";
+import { SHIPPING_BADGE, SUPPORT_EMAIL } from "@/lib/store-copy";
 
 export function ProductTrustStrip() {
   const items = [
-    { icon: Truck, label: "Free UK delivery" },
+    { icon: Truck, label: SHIPPING_BADGE },
     { icon: CreditCard, label: "Secure Stripe checkout" },
     { icon: RotateCcw, label: "14-day returns" },
     {
       icon: Mail,
-      label: "UK support",
+      label: "Email support",
       href: `mailto:${SUPPORT_EMAIL}`,
       detail: SUPPORT_EMAIL,
     },

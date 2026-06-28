@@ -7,7 +7,9 @@ import { StoreLayout } from "@/components/StoreLayout";
 import { CheckoutButton } from "@/components/AddToCartButton";
 import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/utils";
-import { useState, useEffect, useRef } from "react";
+import { SHIP_COUNTRIES, countryConfig } from "@/lib/ship-countries";
+import { DELIVERY_ESTIMATE, SHIPPING_BADGE, SUPPORT_EMAIL, UK_FREE_SHIPPING } from "@/lib/store-copy";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export default function CartPage() {
@@ -21,10 +23,64 @@ export default function CartPage() {
   const [city, setCity] = useState("");
   const [county, setCounty] = useState("");
   const [postcode, setPostcode] = useState("");
+  const [country, setCountry] = useState("GB");
+  const [shippingCost, setShippingCost] = useState(0);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingNote, setShippingNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const capturedEmailRef = useRef("");
+  const shipConfig = countryConfig(country);
+  const orderTotal = total + shippingCost;
+
+  const refreshShipping = useCallback(async () => {
+    if (items.length === 0) {
+      setShippingCost(0);
+      setShippingNote("");
+      return;
+    }
+    if (postcode.trim().length < 2) {
+      setShippingCost(country === "GB" ? 0 : shippingCost);
+      setShippingNote(country === "GB" ? UK_FREE_SHIPPING : "Enter postcode to calculate shipping");
+      return;
+    }
+
+    setShippingLoading(true);
+    try {
+      const res = await fetch("/api/checkout/shipping-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          country,
+          postcode: postcode.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Shipping quote failed");
+      setShippingCost(data.shippingCostGbp);
+      setShippingNote(
+        data.shippingCostGbp === 0
+          ? UK_FREE_SHIPPING
+          : `${data.logisticName} · ${data.deliveryEstimate}`
+      );
+    } catch (err) {
+      setShippingNote(err instanceof Error ? err.message : "Could not quote shipping");
+      if (country === "GB") {
+        setShippingCost(0);
+      }
+    } finally {
+      setShippingLoading(false);
+    }
+  }, [items, country, postcode]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshShipping();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [refreshShipping]);
 
   useEffect(() => {
     fetch("/api/checkout/status")
@@ -58,6 +114,10 @@ export default function CartPage() {
       setError("Please fill in all required fields");
       return;
     }
+    if (country !== "GB" && shippingCost <= 0 && shippingLoading) {
+      setError("Calculating shipping — try again in a moment");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -76,6 +136,8 @@ export default function CartPage() {
           city,
           county: county || undefined,
           postcode,
+          country,
+          shippingCostGbp: shippingCost,
         }),
       });
 
@@ -102,6 +164,7 @@ export default function CartPage() {
             city: data.city,
             county: data.county,
             postcode: data.postcode,
+            country: data.country,
             total: data.total,
             productIds: items.map((i) => i.productId),
             numItems: items.reduce((n, i) => n + i.quantity, 0),
@@ -195,9 +258,20 @@ export default function CartPage() {
 
             <div className="lg:col-span-2">
               <div className="sticky top-24 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-                <h2 className="mb-4 text-lg font-semibold text-white">UK Delivery</h2>
+                <h2 className="mb-4 text-lg font-semibold text-white">Delivery</h2>
 
                 <div className="space-y-3">
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white focus:border-violet-500 focus:outline-none"
+                  >
+                    {SHIP_COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="email"
                     placeholder="Email *"
@@ -244,7 +318,7 @@ export default function CartPage() {
                     />
                     <input
                       type="text"
-                      placeholder="Postcode *"
+                      placeholder={`${shipConfig.postcodeLabel} *`}
                       value={postcode}
                       onChange={(e) => setPostcode(e.target.value)}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none"
@@ -252,7 +326,7 @@ export default function CartPage() {
                   </div>
                   <input
                     type="text"
-                    placeholder="County (optional)"
+                    placeholder={country === "GB" ? "County (optional)" : "State / province (optional)"}
                     value={county}
                     onChange={(e) => setCounty(e.target.value)}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none"
@@ -266,11 +340,20 @@ export default function CartPage() {
                   </div>
                   <div className="mt-1 flex justify-between text-zinc-400">
                     <span>Shipping</span>
-                    <span className="text-emerald-400">Free</span>
+                    <span className={shippingCost === 0 ? "text-emerald-400" : "text-white"}>
+                      {shippingLoading
+                        ? "Calculating…"
+                        : shippingCost === 0
+                          ? "Free"
+                          : formatPrice(shippingCost)}
+                    </span>
                   </div>
+                  {shippingNote && (
+                    <p className="mt-1 text-xs text-zinc-500">{shippingNote}</p>
+                  )}
                   <div className="mt-3 flex justify-between text-lg font-bold text-white">
                     <span>Total</span>
-                    <span>{formatPrice(total)}</span>
+                    <span>{formatPrice(orderTotal)}</span>
                   </div>
                 </div>
 
@@ -279,23 +362,23 @@ export default function CartPage() {
                 <CheckoutButton
                   onCheckout={handleCheckout}
                   loading={loading}
-                  total={formatPrice(total)}
+                  total={formatPrice(orderTotal)}
                   label={
                     stripeEnabled
-                      ? `Pay securely — ${formatPrice(total)}`
-                      : `Checkout (demo) — ${formatPrice(total)}`
+                      ? `Pay securely — ${formatPrice(orderTotal)}`
+                      : `Checkout (demo) — ${formatPrice(orderTotal)}`
                   }
                 />
 
                 <p className="mt-3 text-center text-xs leading-relaxed text-zinc-500">
                   {stripeEnabled
-                    ? "Secure Stripe checkout · Card & Apple Pay · Free UK delivery · 14-day returns"
+                    ? `Secure Stripe checkout · Card & Apple Pay · ${SHIPPING_BADGE} · 14-day returns`
                     : "Demo checkout — add Stripe keys to .env.local for real payments"}
                 </p>
                 <p className="mt-2 text-center text-xs text-zinc-500">
-                  Usually arrives within 7–10 working days · UK support{" "}
-                  <a href="mailto:support@buzzdrop.co.uk" className="text-zinc-400 hover:text-zinc-300">
-                    support@buzzdrop.co.uk
+                  {DELIVERY_ESTIMATE} ·{" "}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} className="text-zinc-400 hover:text-zinc-300">
+                    {SUPPORT_EMAIL}
                   </a>
                 </p>
                 <p className="mt-2 text-center text-xs text-zinc-500">

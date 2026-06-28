@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getHeroProducts, syncHeroProductPins } from "@/lib/hero-products";
+import { getProductDisplayPrice } from "@/lib/automation/pricing";
 
 export async function GET() {
   syncHeroProductPins();
@@ -11,7 +12,7 @@ export async function GET() {
       slug: h.product.slug,
       title: h.product.title,
       category: h.product.category,
-      retail_price: h.product.retail_price,
+      retail_price: getProductDisplayPrice(h.product),
       supplier_cost: h.product.supplier_cost,
       image_url: h.product.image_url,
       trend_score: h.product.trend_score,

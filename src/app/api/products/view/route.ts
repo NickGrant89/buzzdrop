@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordProductView } from "@/lib/products-views";
 import { getProductById } from "@/lib/products";
+import { getProductDisplayPrice } from "@/lib/automation/pricing";
 import { buildMetaUserDataFromRequest, sendMetaCapiEvent } from "@/lib/meta-capi";
 import { getSiteUrl } from "@/lib/seo";
 
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       eventSourceUrl: eventSourceUrl ?? `${getSiteUrl()}/product/${product.slug}`,
       userData,
       customData: {
-        value: product.retail_price,
+        value: getProductDisplayPrice(product),
         currency: "GBP",
         contentIds: [product.id],
         contentName: product.title,

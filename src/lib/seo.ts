@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import type { Product } from "./db";
+import { getProductDisplayPrice } from "./product-landing";
 import { getSocialLinks } from "./social-links";
 
 const siteName = "BuzzDrop";
 const defaultDescription =
-  "Shop viral trending products in the UK. Free delivery, secure checkout, and 14-day returns on every order.";
+  "Shop viral trending products worldwide. Secure checkout, worldwide shipping, and 14-day returns on every order.";
 
 export function getSiteUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? "https://buzzdrop.co.uk").replace(/\/$/, "");
@@ -63,6 +64,20 @@ export function buildPageMetadata({
   };
 }
 
+/** Google Merchant listings reject SKUs with spaces or odd characters. */
+export function formatProductSku(product: Product): string {
+  const raw = product.supplier_sku?.trim();
+  if (raw) {
+    const sanitized = raw
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Za-z0-9_-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    if (sanitized.length >= 1 && sanitized.length <= 70) return sanitized;
+  }
+  return product.id.replace(/-/g, "").slice(0, 50);
+}
+
 export function productJsonLd(product: Product) {
   return {
     "@context": "https://schema.org",
@@ -70,15 +85,17 @@ export function productJsonLd(product: Product) {
     name: product.title,
     description: product.description,
     image: product.image_url,
-    sku: product.supplier_sku,
+    sku: formatProductSku(product),
+    mpn: formatProductSku(product),
     brand: { "@type": "Brand", name: "BuzzDrop" },
     offers: {
       "@type": "Offer",
       url: `${getSiteUrl()}/product/${product.slug}`,
       priceCurrency: "GBP",
-      price: product.retail_price.toFixed(2),
+      price: getProductDisplayPrice(product).toFixed(2),
       availability:
         product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      itemCondition: "https://schema.org/NewCondition",
       seller: { "@type": "Organization", name: "BuzzDrop" },
     },
   };
@@ -130,7 +147,7 @@ export function organizationJsonLd() {
       "@type": "ContactPoint",
       email: "support@buzzdrop.co.uk",
       contactType: "customer service",
-      areaServed: "GB",
+      areaServed: "Worldwide",
     },
   };
 }

@@ -8,7 +8,7 @@ import { ProductTrustStrip } from "@/components/ProductTrustStrip";
 import { getProductBySlug } from "@/lib/products";
 import { formatCategoryDisplay, categorySlug } from "@/lib/categories";
 import { getProductFaqs, getProductSeoDescription, getProductSeoTitle } from "@/lib/product-seo";
-import { getProductLanding } from "@/lib/product-landing";
+import { getProductLanding, getProductDisplayPrice } from "@/lib/product-landing";
 import { buildPageMetadata, productJsonLd, faqJsonLd, breadcrumbJsonLd } from "@/lib/seo";
 import { formatPrice } from "@/lib/utils";
 import { Truck, Shield, ArrowLeft, Gift, Check } from "lucide-react";
@@ -43,6 +43,7 @@ export default async function ProductPage({
   if (!product) notFound();
 
   const landing = getProductLanding(slug);
+  const displayPrice = getProductDisplayPrice(product);
   const categoryLabel = formatCategoryDisplay(product.category);
   const categoryPath = `/category/${categorySlug(categoryLabel)}`;
   const faqs = landing?.seoFaqs ?? getProductFaqs(product);
@@ -71,7 +72,7 @@ export default async function ProductPage({
           ),
         }}
       />
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className={`mx-auto max-w-7xl px-4 py-8 sm:px-6 ${landing ? "pb-28 md:pb-8" : ""}`}>
         <Link
           href="/#shop"
           className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
@@ -106,10 +107,8 @@ export default async function ProductPage({
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <span className="text-3xl font-bold text-white">
-                {formatPrice(product.retail_price)}
-              </span>
-              {landing?.compareAtPrice && landing.compareAtPrice > product.retail_price ? (
+              <span className="text-3xl font-bold text-white">{formatPrice(displayPrice)}</span>
+              {landing?.compareAtPrice && landing.compareAtPrice > displayPrice ? (
                 <span className="text-lg text-zinc-500 line-through">
                   {formatPrice(landing.compareAtPrice)}
                 </span>
@@ -132,6 +131,16 @@ export default async function ProductPage({
                 support@buzzdrop.co.uk
               </a>
             </p>
+
+            {landing ? (
+              <div className="mt-6">
+                <ProductDetailClient
+                  product={product}
+                  displayPrice={displayPrice}
+                  stickyCheckout
+                />
+              </div>
+            ) : null}
 
             {landing?.bullets?.length ? (
               <ul className="mt-6 space-y-2">
@@ -171,9 +180,11 @@ export default async function ProductPage({
               )}
             </p>
 
-            <div className="mt-8">
-              <ProductDetailClient product={product} />
-            </div>
+            {!landing ? (
+              <div className="mt-8">
+                <ProductDetailClient product={product} displayPrice={displayPrice} />
+              </div>
+            ) : null}
 
             <div className="mt-12 border-t border-zinc-800 pt-8">
               <h2 className="text-lg font-semibold text-white">Frequently asked questions</h2>

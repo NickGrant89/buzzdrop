@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { roundToCharmPrice } from "./automation/pricing";
 
 export type Product = {
   id: string;
@@ -43,6 +44,8 @@ export type Order = {
   shipping_county: string;
   shipping_postcode: string;
   shipping_phone: string;
+  shipping_country: string;
+  shipping_cost_gbp: number;
   status: "pending" | "paid" | "fulfilled" | "shipped" | "failed";
   total: number;
   order_kind: "standard" | "manual";
@@ -287,6 +290,12 @@ function migrateSchema(database: Database.Database) {
   if (!orderCols.includes("abandoned_reminder_2_at")) {
     database.exec("ALTER TABLE orders ADD COLUMN abandoned_reminder_2_at TEXT");
   }
+  if (!orderCols.includes("shipping_country")) {
+    database.exec("ALTER TABLE orders ADD COLUMN shipping_country TEXT NOT NULL DEFAULT 'GB'");
+  }
+  if (!orderCols.includes("shipping_cost_gbp")) {
+    database.exec("ALTER TABLE orders ADD COLUMN shipping_cost_gbp REAL NOT NULL DEFAULT 0");
+  }
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS cart_leads (
@@ -302,16 +311,44 @@ function migrateSchema(database: Database.Database) {
   `);
 
   seedHeroProductLanding(database);
+  normalizeRetailPrices(database);
+}
+
+function normalizeRetailPrices(database: Database.Database) {
+  const rows = database.prepare("SELECT id, retail_price FROM products").all() as {
+    id: string;
+    retail_price: number;
+  }[];
+  const update = database.prepare(
+    "UPDATE products SET retail_price = ?, updated_at = ? WHERE id = ?"
+  );
+  const now = new Date().toISOString();
+  for (const row of rows) {
+    const charm = roundToCharmPrice(row.retail_price);
+    if (charm !== row.retail_price) {
+      update.run(charm, now, row.id);
+    }
+  }
 }
 
 function seedHeroProductLanding(database: Database.Database) {
   const now = new Date().toISOString();
   const slug = "note-board-creative-led-night-light-usb-message-953728";
+  const adPrice = 22.99;
 
   database
     .prepare(
-      `UPDATE products SET retail_price = 19.99, is_pinned = 1, updated_at = ?
-       WHERE slug = ? AND retail_price > 19.99`
+      `UPDATE products SET retail_price = ?, is_pinned = 1, updated_at = ?
+       WHERE slug = ?`
+    )
+    .run(adPrice, now, slug);
+
+  database
+    .prepare(
+      `UPDATE products SET
+        seo_description = REPLACE(REPLACE(seo_description, '£22.78', '£22.99'), '£19.99', '£22.99'),
+        updated_at = ?
+      WHERE slug = ? AND (seo_description LIKE '%£22.78%' OR seo_description LIKE '%£19.99%')`
     )
     .run(now, slug);
 
@@ -356,7 +393,7 @@ function seedHeroProductLanding(database: Database.Database) {
     )
     .run(
       "LED Note Board Night Light — Free UK Delivery | BuzzDrop",
-      "Write any message on this viral LED note board. USB powered, gift-ready packaging, free UK delivery & secure Stripe checkout. £19.99.",
+      "Write any message on this viral LED note board. USB powered, gift-ready packaging, free UK delivery & secure Stripe checkout. £22.99.",
       noteBoardFaqs,
       "Creative USB LED message board that lights up any text you write — like a mini neon sign for your bedside table, desk, or shelf. Transparent acrylic panel with a warm glow effect. USB powered (cable included). Arrives in gift-ready packaging. Free UK delivery.",
       now,

@@ -3,12 +3,8 @@
 # dependencies
 /node_modules
 /.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp.js
+.yarn/install-state.gz
 
 # testing
 /coverage
@@ -28,10 +24,10 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env*.local
 
 # vercel
 .vercel
@@ -41,11 +37,15 @@ yarn-error.log*
 next-env.d.ts
 
 # local database
-/data/
+/data/*.db
+/data/*.db-journal
+/data/*.db-wal
+/data/*.db-shm
 
 # Large AI-generated social drafts (regenerate with npm run generate:social)
 /public/social/buzzdrop-fb-*.png
 
-# Generated ad videos — keep local, run: npm run generate:videos
+# Generated ad videos — local only; upload to Railway with npm run push:videos
 /public/social/videos/*.mp4
 /public/social/videos/*-slide.jpg
+/public/social/videos/TIKTOK-MANUAL-PACK.md

@@ -24,7 +24,8 @@ const checkoutSchema = z.object({
   line2: z.string().optional(),
   city: z.string().min(2),
   county: z.string().optional(),
-  postcode: z.string().min(5),
+  postcode: z.string().min(2).max(20),
+  country: z.string().length(2).default("GB"),
 });
 
 export async function POST(request: Request) {
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       city: parsed.city,
       county: parsed.county,
       postcode: parsed.postcode.toUpperCase(),
+      country: parsed.country.toUpperCase(),
     };
 
     const appUrl = (
@@ -52,7 +54,10 @@ export async function POST(request: Request) {
     const result = await createOrderPayment(parsed.items, details);
 
     if (result.demo) {
-      const orderId = createDemoOrder(details, parsed.items);
+      const orderId = createDemoOrder(
+        { ...details, shippingCostGbp: result.shippingCostGbp },
+        parsed.items
+      );
       return NextResponse.json({
         demo: true,
         orderId,
@@ -70,7 +75,7 @@ export async function POST(request: Request) {
         email: details.email,
         phone: details.phone,
         postcode: details.postcode,
-        country: "gb",
+        country: details.country.toLowerCase(),
         ...nameParts,
       }),
       customData: {
@@ -94,6 +99,8 @@ export async function POST(request: Request) {
       city: details.city,
       county: details.county,
       postcode: details.postcode,
+      country: details.country,
+      shippingCostGbp: result.shippingCostGbp,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Checkout failed";

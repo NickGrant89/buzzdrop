@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getProductById } from "@/lib/products";
+import { getProductDisplayPrice } from "@/lib/automation/pricing";
 import {
   buildMetaUserDataFromRequest,
   sendMetaCapiEvent,
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
         eventSourceUrl: body.eventSourceUrl,
         userData,
         customData: {
-          value: product.retail_price * quantity,
+          value: getProductDisplayPrice(product) * quantity,
           currency: "GBP",
           contentIds: [product.id],
           contentName: product.title,
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
       eventSourceUrl: body.eventSourceUrl,
       userData,
       customData: {
-        value: product.retail_price,
+        value: getProductDisplayPrice(product),
         currency: "GBP",
         contentIds: [product.id],
         contentName: product.title,

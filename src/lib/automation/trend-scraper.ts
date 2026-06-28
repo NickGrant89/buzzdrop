@@ -255,7 +255,7 @@ export async function updatePricesAndStock(): Promise<number> {
   const products = db
     .prepare(
       `SELECT id, supplier_vid, supplier_product_cost, supplier_shipping_cost, supplier_cost, trend_score
-       FROM products WHERE is_active = 1 AND supplier_pid != ''`
+       FROM products WHERE is_active = 1 AND supplier_pid != '' AND is_pinned = 0`
     )
     .all() as {
     id: string;

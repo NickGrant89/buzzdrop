@@ -1,6 +1,8 @@
 import { getHeroProducts, syncHeroProductPins } from "../hero-products";
-import { buildTikTokManualPost } from "./tiktok-content";
+import { getProductDisplayPrice } from "../automation/pricing";
 import { getSiteUrl } from "../seo";
+import { formatPrice } from "../utils";
+import { buildTikTokManualPost } from "./tiktok-content";
 import { videoFileExists, videoFilePath } from "./videos";
 
 export type MarketingExportProduct = {
@@ -67,6 +69,7 @@ export function getMarketingExport(limit = 6): MarketingExport {
   const siteUrl = getSiteUrl();
 
   const products: MarketingExportProduct[] = heroes.map((h, index) => {
+    const displayPrice = getProductDisplayPrice(h.product);
     const post = buildTikTokManualPost(h.product, index + 1);
     const { videoUrl, videoFilename, videoAvailable } = videoPublicUrl(h.product.slug);
     const primaryHook = post.hooks[0]?.openingText ?? post.title;
@@ -86,8 +89,8 @@ export function getMarketingExport(limit = 6): MarketingExport {
       id: h.product.id,
       slug: h.product.slug,
       title: h.product.title,
-      priceGbp: h.product.retail_price,
-      priceLabel: post.priceLabel,
+      priceGbp: displayPrice,
+      priceLabel: formatPrice(displayPrice),
       productUrl: post.productUrl,
       productUrlTracked: trackedProductUrl(post.productUrl, h.product.slug),
       videoUrl,
